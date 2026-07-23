@@ -49,17 +49,19 @@ def get_project_info():
     console.print("\nSelect Project Type")
 
     console.print("1. Machine Learning")
-    console.print("2. Computer Vision")
-    console.print("3. Natural Language Processing")
-    console.print("4. Retrieval-Augmented Generation")
+    console.print("2. Deep Learning")
+    console.print("3. Computer Vision")
+    console.print("4. Natural Language Processing")
+    console.print("5. Retrieval-Augmented Generation")
 
     choice = input("\nEnter choice (1-4): ").strip()
 
     project_types = {
         "1": "ml",
-        "2": "cv",
-        "3": "nlp",
-        "4": "rag",
+        "2": "dl",
+        "3": "cv",
+        "4": "nlp",
+        "5": "rag",
     }
 
     project_type = project_types.get(choice)

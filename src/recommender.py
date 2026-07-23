@@ -24,6 +24,7 @@ def get_template(project):
         "ml": "ml",
         "cv": "cv",
         "nlp": "nlp",
+        "dl":"dl",
     }
 
     return {
