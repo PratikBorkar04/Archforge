@@ -1,10 +1,11 @@
 """
 generator.py
 
-Responsible for creating the project structure.
+Responsible for generating projects from templates.
 """
 
 from pathlib import Path
+import shutil
 
 from rich.console import Console
 
@@ -13,44 +14,40 @@ console = Console()
 
 def create_project(project: dict, recommendation: dict) -> None:
     """
-    Create the project structure.
-
-    Parameters
-    ----------
-    project : dict
-        User project information.
-
-    recommendation : dict
-        Recommended template information.
+    Generate a project by copying the selected template.
     """
 
     project_name = project["name"]
-    project_path = Path(project["path"])
-    project_directory = project_path / project_name
+    project_location = Path(project["path"])
 
-    # Check if project already exists
-    if project_directory.exists():
+    destination = project_location / project_name
+
+    if destination.exists():
         console.print(
             f"[bold red]Error:[/bold red] Project '{project_name}' already exists."
         )
         return
 
-    console.print("\n[cyan]Generating project...[/cyan]")
+    template_name = recommendation["template"]
 
-    # Create main project directory
-    project_directory.mkdir(parents=True)
-
-    # Create folders
-    (project_directory / "src").mkdir()
-    (project_directory / "tests").mkdir()
-
-    # Create files
-    (project_directory / "README.md").touch()
-    (project_directory / "requirements.txt").touch()
-    (project_directory / "pyproject.toml").touch()
-
-    console.print(
-        f"[bold green]✓ Project '{project_name}' created successfully![/bold green]"
+    template_path = (
+        Path(__file__).parent
+        / "templates"
+        / template_name
     )
 
-    console.print(f"\nLocation: {project_directory}")
+    if not template_path.exists():
+        console.print(
+            f"[bold red]Error:[/bold red] Template '{template_name}' not found."
+        )
+        return
+
+    console.print("\n[cyan]Generating project...[/cyan]")
+
+    shutil.copytree(template_path, destination)
+
+    console.print(
+        f"\n[bold green]✓ Project '{project_name}' created successfully![/bold green]"
+    )
+
+    console.print(f"Location : {destination}")
