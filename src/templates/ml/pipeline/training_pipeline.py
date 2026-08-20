@@ -2,27 +2,32 @@
 Training Pipeline
 -----------------
 
-Coordinates the complete machine learning training workflow.
+Coordinates the complete machine learning workflow.
+
+The user only needs to run:
+
+    python app.py
+
+The pipeline automatically executes each stage.
 """
 
 from pathlib import Path
+
+from src.data_ingestion import DataIngestion
 
 
 class TrainingPipeline:
     """
     Coordinates the complete machine learning training workflow.
-
-    Parameters
-    ----------
-    project_root : Path
-        Root directory of the generated ML project.
     """
 
     def __init__(self, project_root: Path) -> None:
         self.project_root = Path(project_root).resolve()
 
     def run(self) -> None:
-        """Execute the machine learning training pipeline."""
+        """
+        Execute the complete machine learning pipeline.
+        """
 
         print("\n" + "=" * 60)
         print("Starting Machine Learning Pipeline")
@@ -30,4 +35,26 @@ class TrainingPipeline:
 
         print(f"\nProject Root: {self.project_root}")
 
-        print("\nPipeline initialized successfully.")
+        # ----------------------------------------------------------
+        # 1. Data Ingestion
+        # ----------------------------------------------------------
+
+        data_ingestion = DataIngestion(
+            project_root=self.project_root
+        )
+
+        train_data, test_data = (
+            data_ingestion.initiate_data_ingestion()
+        )
+
+        print("\nData ingestion completed successfully.")
+
+        print(
+            f"Training samples : {len(train_data)}"
+        )
+
+        print(
+            f"Testing samples  : {len(test_data)}"
+        )
+
+        print("\nPipeline stage completed.")
