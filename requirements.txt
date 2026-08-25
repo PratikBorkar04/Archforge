@@ -5,3 +5,4 @@ rich>=14.0.0
 pandas
 numpy
 scikit-learn
+joblib
