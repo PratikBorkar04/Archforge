@@ -10,9 +10,10 @@ Pipeline
 3. Data Profiling
 4. Data Cleaning
 5. Data Transformation
-6. Model Training
-7. Model Evaluation
-8. Model Saving
+6. Model Selection
+7. Model Training
+8. Model Evaluation
+9. Model Saving
 
 The user only needs to run:
 
@@ -29,14 +30,15 @@ from src.data_validation import DataValidation
 from src.dataset_profiler import DatasetProfiler
 from src.data_cleaning import DataCleaning
 from src.data_transformation import DataTransformation
+from src.model_selector import ModelSelector
 
 
 class TrainingPipeline:
     """
     Orchestrates the complete ML training workflow.
 
-    The pipeline is designed so that the user does not need
-    to manually execute individual ML components.
+    The pipeline automatically executes each stage and passes
+    the output of one stage to the next stage.
     """
 
     def __init__(
@@ -49,23 +51,24 @@ class TrainingPipeline:
         ).resolve()
 
     # ============================================================
-    # Run Pipeline
+    # RUN PIPELINE
     # ============================================================
 
     def run(self) -> Dict[str, Any]:
         """
         Execute the complete ML pipeline.
 
-        Currently implemented stages:
+        Current implemented stages:
 
             1. Data Ingestion
             2. Data Validation
             3. Dataset Profiling
             4. Data Cleaning
             5. Data Transformation
+            6. Model Selection
 
-        Model training, evaluation and saving will be
-        implemented in the next stages.
+        Model training, evaluation and saving will be implemented
+        after the model-selection stage has been tested.
         """
 
         print(
@@ -91,7 +94,7 @@ class TrainingPipeline:
         # ========================================================
 
         print(
-            "\n[1/8] Data Ingestion"
+            "\n[1/9] Data Ingestion"
         )
 
         data_ingestion = DataIngestion(
@@ -112,7 +115,7 @@ class TrainingPipeline:
         # ========================================================
 
         print(
-            "\n[2/8] Data Validation"
+            "\n[2/9] Data Validation"
         )
 
         data_validation = DataValidation(
@@ -133,15 +136,8 @@ class TrainingPipeline:
         # ========================================================
 
         print(
-            "\n[3/8] Dataset Profiling"
+            "\n[3/9] Dataset Profiling"
         )
-
-        # --------------------------------------------------------
-        # Determine target column
-        # --------------------------------------------------------
-        # Data ingestion currently guarantees that the target
-        # column is available as metadata or as the final column.
-        # --------------------------------------------------------
 
         target_column = (
             self._get_target_column(
@@ -155,15 +151,9 @@ class TrainingPipeline:
         )
 
         # --------------------------------------------------------
-        # Profile TRAINING data only
-        # --------------------------------------------------------
+        # Profile training data only.
         #
-        # We intentionally do not profile the test dataset.
-        #
-        # The test dataset must remain unseen for final evaluation.
-        #
-        # Profiling the training data allows the model selector
-        # to make decisions based on the available training data.
+        # Test data must remain unseen until final evaluation.
         # --------------------------------------------------------
 
         profiler = DatasetProfiler(
@@ -182,7 +172,7 @@ class TrainingPipeline:
         # ========================================================
 
         print(
-            "\n[4/8] Data Cleaning"
+            "\n[4/9] Data Cleaning"
         )
 
         data_cleaning = DataCleaning(
@@ -208,10 +198,7 @@ class TrainingPipeline:
         # IMPORTANT
         # ========================================================
         #
-        # From this point onward we MUST use the cleaned datasets.
-        #
-        # Do not accidentally pass the original train_data,
-        # validation_data or test_data to later stages.
+        # From this point onward, only cleaned datasets are used.
         # ========================================================
 
         # ========================================================
@@ -219,7 +206,7 @@ class TrainingPipeline:
         # ========================================================
 
         print(
-            "\n[5/8] Data Transformation"
+            "\n[5/9] Data Transformation"
         )
 
         data_transformation = (
@@ -231,20 +218,95 @@ class TrainingPipeline:
         transformed_data = (
             data_transformation
             .initiate_data_transformation(
-                train_data=(
-                    cleaned_train_data
-                ),
-                validation_data=(
-                    cleaned_validation_data
-                ),
-                test_data=(
-                    cleaned_test_data
-                ),
+                train_data=cleaned_train_data,
+                validation_data=cleaned_validation_data,
+                test_data=cleaned_test_data,
             )
         )
 
         # ========================================================
-        # TEMPORARY SUMMARY
+        # 6. MODEL SELECTION
+        # ========================================================
+
+        print(
+            "\n[6/9] Model Selection"
+        )
+
+        model_selector = ModelSelector(
+            project_root=self.project_root
+        )
+
+        # --------------------------------------------------------
+        # IMPORTANT
+        # --------------------------------------------------------
+        #
+        # The current ModelSelector interface accepts:
+        #
+        #     dataset_profile
+        #
+        # We therefore DO NOT pass transformed_data or
+        # target_column here.
+        #
+        # Model selection decides which algorithms are suitable
+        # for the dataset.
+        #
+        # It does NOT train the models.
+        # --------------------------------------------------------
+
+        model_selection = (
+            model_selector
+            .select_models(
+                dataset_profile=dataset_profile
+            )
+        )
+
+        # ========================================================
+        # 7. MODEL TRAINING
+        # ========================================================
+
+        print(
+            "\n[7/9] Model Training : PENDING"
+        )
+
+        # --------------------------------------------------------
+        # ModelTraining will be added after ModelSelector has
+        # been completely tested.
+        # --------------------------------------------------------
+
+        training_result = None
+
+        # ========================================================
+        # 8. MODEL EVALUATION
+        # ========================================================
+
+        print(
+            "\n[8/9] Model Evaluation : PENDING"
+        )
+
+        # --------------------------------------------------------
+        # Evaluation will compare trained models using metrics
+        # appropriate for regression/classification.
+        # --------------------------------------------------------
+
+        evaluation_result = None
+
+        # ========================================================
+        # 9. MODEL SAVING
+        # ========================================================
+
+        print(
+            "\n[9/9] Model Saving : PENDING"
+        )
+
+        # --------------------------------------------------------
+        # Model saving will be implemented after training and
+        # evaluation.
+        # --------------------------------------------------------
+
+        saving_result = None
+
+        # ========================================================
+        # PIPELINE SUMMARY
         # ========================================================
 
         print(
@@ -261,49 +323,53 @@ class TrainingPipeline:
         )
 
         print(
-            "\n[1/8] Data Ingestion      : COMPLETED"
+            "\n[1/9] Data Ingestion      : COMPLETED"
         )
 
         print(
-            "[2/8] Data Validation     : COMPLETED"
+            "[2/9] Data Validation     : COMPLETED"
         )
 
         print(
-            "[3/8] Dataset Profiling   : COMPLETED"
+            "[3/9] Dataset Profiling   : COMPLETED"
         )
 
         print(
-            "[4/8] Data Cleaning       : COMPLETED"
+            "[4/9] Data Cleaning       : COMPLETED"
         )
 
         print(
-            "[5/8] Data Transformation : COMPLETED"
+            "[5/9] Data Transformation : COMPLETED"
         )
 
         print(
-            "[6/8] Model Training      : PENDING"
+            "[6/9] Model Selection     : COMPLETED"
         )
 
         print(
-            "[7/8] Model Evaluation    : PENDING"
+            "[7/9] Model Training      : PENDING"
         )
 
         print(
-            "[8/8] Model Saving        : PENDING"
+            "[8/9] Model Evaluation    : PENDING"
         )
 
         print(
-            "\nPipeline stages completed successfully."
+            "[9/9] Model Saving        : PENDING"
+        )
+
+        print(
+            "\nModel selection stage completed."
         )
 
         # ========================================================
-        # Return pipeline outputs
+        # RETURN PIPELINE OUTPUTS
         # ========================================================
 
         return {
 
             # ----------------------------------------------------
-            # Original data
+            # Original datasets
             # ----------------------------------------------------
 
             "train_data":
@@ -316,6 +382,13 @@ class TrainingPipeline:
                 test_data,
 
             # ----------------------------------------------------
+            # Target
+            # ----------------------------------------------------
+
+            "target_column":
+                target_column,
+
+            # ----------------------------------------------------
             # Validation
             # ----------------------------------------------------
 
@@ -323,14 +396,14 @@ class TrainingPipeline:
                 validation_report,
 
             # ----------------------------------------------------
-            # Profiling
+            # Dataset profile
             # ----------------------------------------------------
 
             "dataset_profile":
                 dataset_profile,
 
             # ----------------------------------------------------
-            # Cleaned data
+            # Cleaned datasets
             # ----------------------------------------------------
 
             "cleaned_train_data":
@@ -351,10 +424,30 @@ class TrainingPipeline:
 
             "transformed_data":
                 transformed_data,
+
+            # ----------------------------------------------------
+            # Model selection
+            # ----------------------------------------------------
+
+            "model_selection":
+                model_selection,
+
+            # ----------------------------------------------------
+            # Future stages
+            # ----------------------------------------------------
+
+            "training_result":
+                training_result,
+
+            "evaluation_result":
+                evaluation_result,
+
+            "saving_result":
+                saving_result,
         }
 
     # ============================================================
-    # Target Column Detection
+    # TARGET COLUMN DETECTION
     # ============================================================
 
     @staticmethod
@@ -370,32 +463,13 @@ class TrainingPipeline:
         Fallback:
             Use the final column.
 
-        The fallback exists because the current Data Ingestion
-        implementation guarantees that the target is the final
-        column when explicit metadata is unavailable.
+        Data Ingestion currently guarantees that the target
+        column is placed at the end when explicit metadata is
+        unavailable.
         """
 
         # --------------------------------------------------------
-        # 1. Check DataFrame metadata
-        # --------------------------------------------------------
-
-        if hasattr(
-            train_data,
-            "attrs",
-        ):
-
-            target_column = (
-                train_data.attrs.get(
-                    "target_column"
-                )
-            )
-
-            if target_column:
-
-                return target_column
-
-        # --------------------------------------------------------
-        # 2. Validate dataset
+        # Validate dataset
         # --------------------------------------------------------
 
         if train_data is None:
@@ -414,11 +488,26 @@ class TrainingPipeline:
             )
 
         # --------------------------------------------------------
-        # 3. Temporary fallback
+        # Check DataFrame metadata
         # --------------------------------------------------------
-        #
-        # Data ingestion currently places the target column
-        # at the end of the dataset.
+
+        if hasattr(
+            train_data,
+            "attrs",
+        ):
+
+            target_column = (
+                train_data.attrs.get(
+                    "target_column"
+                )
+            )
+
+            if target_column:
+
+                return target_column
+
+        # --------------------------------------------------------
+        # Fallback
         # --------------------------------------------------------
 
         return train_data.columns[-1]

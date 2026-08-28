@@ -11,12 +11,19 @@ Responsibilities
 4. Detect regression vs classification.
 5. Detect dataset complexity.
 6. Provide model-selection metadata.
-7. Warn when the dataset is too small for reliable training.
+7. Determine whether automated training is safe.
+8. Provide warnings for extremely small datasets.
 
 Important
 ---------
-The profiler does NOT modify the dataset.
-It only analyzes the training data and produces metadata.
+The profiler DOES NOT modify the dataset.
+
+It only analyzes the training data and produces metadata
+for later stages such as:
+
+    Model Selection
+    Model Training
+    Model Evaluation
 """
 
 from pathlib import Path
@@ -24,7 +31,12 @@ from typing import Dict, Any
 
 import numpy as np
 import pandas as pd
+# ============================================================
+# Terminal Colors
+# ============================================================
 
+YELLOW = "\033[93m"
+RESET = "\033[0m"
 
 class DatasetProfiler:
     """
@@ -39,6 +51,28 @@ class DatasetProfiler:
     SMALL_DATASET = 500
     MEDIUM_DATASET = 5000
     LARGE_DATASET = 50000
+
+    # ============================================================
+    # Training Safety Thresholds
+    # ============================================================
+
+    # Absolute minimum number of rows.
+    ABSOLUTE_MIN_ROWS = 20
+
+    # Dataset below this is usable only with strong caution.
+    CAUTION_ROWS = 50
+
+    # Minimum samples per feature for normal automated training.
+    MIN_SAMPLES_PER_FEATURE = 5
+
+    # Minimum samples per feature for high-dimensional datasets.
+    HIGH_DIMENSIONAL_SAMPLES_PER_FEATURE = 10
+
+    # Minimum number of samples expected for classification.
+    MIN_CLASSIFICATION_ROWS = 50
+
+    # Minimum examples per class for reliable classification.
+    MIN_SAMPLES_PER_CLASS = 5
 
     # ============================================================
     # Initialization
@@ -78,6 +112,10 @@ class DatasetProfiler:
             Dataset profile.
         """
 
+        # --------------------------------------------------------
+        # Validate dataset
+        # --------------------------------------------------------
+
         if data is None:
 
             raise ValueError(
@@ -101,19 +139,6 @@ class DatasetProfiler:
                 f"not found in dataset."
             )
 
-        print(
-            "\n"
-            + "=" * 60
-        )
-
-        print(
-            "DATASET PROFILING"
-        )
-
-        print(
-            "=" * 60
-        )
-
         # ========================================================
         # Basic Information
         # ========================================================
@@ -134,10 +159,12 @@ class DatasetProfiler:
         # Feature Types
         # ========================================================
 
+        feature_data = data[
+            feature_columns
+        ]
+
         numerical_features = (
-            data[
-                feature_columns
-            ]
+            feature_data
             .select_dtypes(
                 include=np.number
             )
@@ -146,9 +173,7 @@ class DatasetProfiler:
         )
 
         categorical_features = (
-            data[
-                feature_columns
-            ]
+            feature_data
             .select_dtypes(
                 exclude=np.number
             )
@@ -172,10 +197,17 @@ class DatasetProfiler:
             self.target_column
         ]
 
-        target_unique_values = (
-            target.nunique(
-                dropna=True
+        target_clean = target.dropna()
+
+        if target_clean.empty:
+
+            raise ValueError(
+                "Target column contains "
+                "no valid values."
             )
+
+        target_unique_values = int(
+            target_clean.nunique()
         )
 
         target_dtype = str(
@@ -188,7 +220,7 @@ class DatasetProfiler:
 
         problem_type = (
             self._detect_problem_type(
-                target
+                target_clean
             )
         )
 
@@ -206,16 +238,17 @@ class DatasetProfiler:
         # Feature / Sample Ratio
         # ========================================================
 
-        if rows > 0:
+        feature_sample_ratio = (
+            feature_count / rows
+            if rows > 0
+            else 0.0
+        )
 
-            feature_sample_ratio = (
-                feature_count
-                / rows
-            )
-
-        else:
-
-            feature_sample_ratio = 0.0
+        samples_per_feature = (
+            rows / feature_count
+            if feature_count > 0
+            else float("inf")
+        )
 
         dimensionality_level = (
             self._detect_dimensionality(
@@ -238,7 +271,7 @@ class DatasetProfiler:
             / data.size
             * 100
             if data.size > 0
-            else 0
+            else 0.0
         )
 
         # ========================================================
@@ -250,6 +283,41 @@ class DatasetProfiler:
             .sum()
         )
 
+        duplicate_percentage = (
+            duplicate_rows
+            / rows
+            * 100
+            if rows > 0
+            else 0.0
+        )
+
+        # ========================================================
+        # Target Statistics
+        # ========================================================
+
+        class_distribution = {}
+
+        min_class_samples = None
+
+        if problem_type == "CLASSIFICATION":
+
+            value_counts = (
+                target_clean
+                .value_counts()
+            )
+
+            class_distribution = {
+                str(index): int(value)
+                for index, value
+                in value_counts.items()
+            }
+
+            if not value_counts.empty:
+
+                min_class_samples = int(
+                    value_counts.min()
+                )
+
         # ========================================================
         # Dataset Complexity
         # ========================================================
@@ -258,10 +326,10 @@ class DatasetProfiler:
             self._detect_complexity(
                 rows=rows,
                 feature_count=feature_count,
-                categorical_count=
-                    categorical_count,
-                feature_sample_ratio=
-                    feature_sample_ratio,
+                categorical_count=categorical_count,
+                feature_sample_ratio=(
+                    feature_sample_ratio
+                ),
             )
         )
 
@@ -269,11 +337,17 @@ class DatasetProfiler:
         # Training Safety
         # ========================================================
 
-        training_recommendation = (
+        safety = (
             self._training_safety_check(
                 rows=rows,
                 feature_count=feature_count,
                 problem_type=problem_type,
+                samples_per_feature=(
+                    samples_per_feature
+                ),
+                min_class_samples=(
+                    min_class_samples
+                ),
             )
         )
 
@@ -282,6 +356,10 @@ class DatasetProfiler:
         # ========================================================
 
         profile = {
+
+            # ----------------------------------------------------
+            # Dataset
+            # ----------------------------------------------------
 
             "rows":
                 rows,
@@ -301,6 +379,10 @@ class DatasetProfiler:
             "categorical_feature_count":
                 categorical_count,
 
+            # ----------------------------------------------------
+            # Target
+            # ----------------------------------------------------
+
             "target_column":
                 self.target_column,
 
@@ -308,15 +390,27 @@ class DatasetProfiler:
                 target_dtype,
 
             "target_unique_values":
-                int(
-                    target_unique_values
-                ),
+                target_unique_values,
 
             "problem_type":
                 problem_type,
 
+            "class_distribution":
+                class_distribution,
+
+            "minimum_class_samples":
+                min_class_samples,
+
+            # ----------------------------------------------------
+            # Dataset size
+            # ----------------------------------------------------
+
             "dataset_size":
                 dataset_size,
+
+            # ----------------------------------------------------
+            # Dimensionality
+            # ----------------------------------------------------
 
             "feature_sample_ratio":
                 round(
@@ -324,8 +418,22 @@ class DatasetProfiler:
                     4,
                 ),
 
+            "samples_per_feature":
+                round(
+                    samples_per_feature,
+                    4,
+                )
+                if np.isfinite(
+                    samples_per_feature
+                )
+                else None,
+
             "dimensionality":
                 dimensionality_level,
+
+            # ----------------------------------------------------
+            # Data quality
+            # ----------------------------------------------------
 
             "missing_values":
                 total_missing_values,
@@ -339,19 +447,38 @@ class DatasetProfiler:
             "duplicate_rows":
                 duplicate_rows,
 
+            "duplicate_percentage":
+                round(
+                    duplicate_percentage,
+                    2,
+                ),
+
+            # ----------------------------------------------------
+            # Complexity
+            # ----------------------------------------------------
+
             "dataset_complexity":
                 complexity,
 
+            # ----------------------------------------------------
+            # Training safety
+            # ----------------------------------------------------
+
             "training_recommendation":
-                training_recommendation,
+                safety["recommendation"],
 
             "training_safe":
-                training_recommendation
-                == "SAFE",
+                safety["safe"],
+
+            "training_warnings":
+                safety["warnings"],
+
+            "training_reason":
+                safety["reason"],
         }
 
         # ========================================================
-        # Display Profile
+        # Display
         # ========================================================
 
         self._display_profile(
@@ -369,24 +496,26 @@ class DatasetProfiler:
         target: pd.Series,
     ) -> str:
         """
-        Detect whether the ML problem is classification
-        or regression.
+        Detect classification vs regression.
 
         Rules
         -----
-        1. Object/string/category/bool target
-           -> CLASSIFICATION
 
-        2. Numerical target:
-           - continuous values
-           -> REGRESSION
+        Object / string / category / bool
+            -> CLASSIFICATION
 
-           - binary/discrete class-like values
-           -> CLASSIFICATION
+        Numerical binary target
+            -> CLASSIFICATION
+
+        Small discrete integer target
+            -> CLASSIFICATION
+
+        Otherwise numerical target
+            -> REGRESSION
 
         Important:
-        A numerical target with only a few values is NOT
-        automatically considered classification.
+        A numerical target with only a few values is not
+        automatically classification.
 
         Example:
 
@@ -395,12 +524,8 @@ class DatasetProfiler:
             200000
             300000
 
-        is still REGRESSION.
+        remains REGRESSION.
         """
-
-        # --------------------------------------------------------
-        # Remove missing values for analysis
-        # --------------------------------------------------------
 
         target = target.dropna()
 
@@ -422,7 +547,7 @@ class DatasetProfiler:
             return "CLASSIFICATION"
 
         # --------------------------------------------------------
-        # String / Object / Category
+        # Object / String / Category
         # --------------------------------------------------------
 
         if (
@@ -430,15 +555,16 @@ class DatasetProfiler:
                 target
             )
             or
-            pd.api.types.is_categorical_dtype(
-                target
+            isinstance(
+                target.dtype,
+                pd.CategoricalDtype,
             )
         ):
 
             return "CLASSIFICATION"
 
         # --------------------------------------------------------
-        # Numerical target
+        # Numerical
         # --------------------------------------------------------
 
         if pd.api.types.is_numeric_dtype(
@@ -454,11 +580,7 @@ class DatasetProfiler:
             )
 
             # ----------------------------------------------------
-            # Binary numerical target
-            #
-            # Examples:
-            # 0 / 1
-            # True / False represented numerically
+            # Binary target
             # ----------------------------------------------------
 
             if unique_values == 2:
@@ -466,16 +588,7 @@ class DatasetProfiler:
                 return "CLASSIFICATION"
 
             # ----------------------------------------------------
-            # Small discrete integer targets
-            #
-            # Examples:
-            #
-            # Rating:
-            # 1,2,3,4,5
-            #
-            # Class:
-            # 0,1,2
-            #
+            # Discrete integer target
             # ----------------------------------------------------
 
             if pd.api.types.is_integer_dtype(
@@ -485,23 +598,9 @@ class DatasetProfiler:
                 unique_ratio = (
                     unique_values
                     / total_values
+                    if total_values > 0
+                    else 1.0
                 )
-
-                # Small number of unique integer
-                # values compared with dataset size.
-                #
-                # Example:
-                #
-                # 1000 rows
-                # 3 classes
-                #
-                # -> Classification
-                #
-                # 1000 rows
-                # 850 unique ages
-                #
-                # -> Regression
-                #
 
                 if (
                     unique_values <= 20
@@ -511,7 +610,7 @@ class DatasetProfiler:
                     return "CLASSIFICATION"
 
             # ----------------------------------------------------
-            # Otherwise numerical target is continuous.
+            # Continuous numerical target
             # ----------------------------------------------------
 
             return "REGRESSION"
@@ -532,7 +631,7 @@ class DatasetProfiler:
         rows: int,
     ) -> str:
         """
-        Categorize dataset based on number of rows.
+        Categorize dataset based on row count.
         """
 
         if rows < cls.VERY_SMALL_DATASET:
@@ -562,13 +661,7 @@ class DatasetProfiler:
         feature_sample_ratio: float,
     ) -> str:
         """
-        Determine feature/sample dimensionality.
-
-        Lower ratio:
-            More samples per feature.
-
-        Higher ratio:
-            More features relative to samples.
+        Determine dimensionality relative to sample count.
         """
 
         if feature_sample_ratio >= 1.0:
@@ -599,13 +692,13 @@ class DatasetProfiler:
         """
         Estimate dataset complexity.
 
-        This is NOT a model-performance prediction.
+        This is NOT a prediction of model performance.
 
-        It is only used to help narrow down candidate models.
+        It is metadata used by the Model Selector.
         """
 
         # --------------------------------------------------------
-        # Extremely small data
+        # Extremely small dataset
         # --------------------------------------------------------
 
         if rows < 20:
@@ -613,7 +706,7 @@ class DatasetProfiler:
             return "EXTREME"
 
         # --------------------------------------------------------
-        # High-dimensional relative to samples
+        # High dimensionality
         # --------------------------------------------------------
 
         if feature_sample_ratio >= 0.5:
@@ -621,7 +714,7 @@ class DatasetProfiler:
             return "HIGH"
 
         # --------------------------------------------------------
-        # Many categorical features
+        # Many categorical features relative to data
         # --------------------------------------------------------
 
         if (
@@ -647,64 +740,245 @@ class DatasetProfiler:
 
             return "MODERATE"
 
+        # --------------------------------------------------------
+        # Small but usable dataset
+        # --------------------------------------------------------
+
         return "LOW"
 
     # ============================================================
     # Training Safety
     # ============================================================
 
-    @staticmethod
+    @classmethod
     def _training_safety_check(
+        cls,
         rows: int,
         feature_count: int,
         problem_type: str,
-    ) -> str:
+        samples_per_feature: float,
+        min_class_samples,
+    ) -> Dict[str, Any]:
         """
-        Determine whether the dataset contains enough samples
-        for meaningful automated model training.
+        Determine whether automated training is appropriate.
 
-        This is deliberately conservative.
+        IMPORTANT
+        ---------
+        This does not determine which model should be used.
 
-        The model selector can later use more sophisticated
-        rules based on the selected algorithm.
+        Model selection is handled by ModelSelector.
+
+        The profiler only determines whether automated training
+        is:
+
+            SAFE
+            CAUTION
+            UNSAFE
         """
 
-        # --------------------------------------------------------
-        # Absolute minimum
-        # --------------------------------------------------------
+        warnings = []
 
-        if rows < 20:
+        # ========================================================
+        # 1. Absolute minimum
+        # ========================================================
 
-            return "UNSAFE"
+        if rows < cls.ABSOLUTE_MIN_ROWS:
 
-        # --------------------------------------------------------
-        # Too many features for available samples
-        # --------------------------------------------------------
+            warnings.append(
+                "Dataset contains fewer than "
+                f"{cls.ABSOLUTE_MIN_ROWS} training rows."
+            )
+
+            return {
+
+                "safe":
+                    False,
+
+                "recommendation":
+                    "UNSAFE",
+
+                "reason":
+                    "Insufficient training samples "
+                    "for reliable automated training.",
+
+                "warnings":
+                    warnings,
+            }
+
+        # ========================================================
+        # 2. High dimensionality
+        # ========================================================
 
         if (
             feature_count > 0
-            and rows
-            < feature_count * 5
+            and
+            samples_per_feature
+            < cls.MIN_SAMPLES_PER_FEATURE
         ):
 
-            return "UNSAFE"
+            warnings.append(
+                "There are too few training samples "
+                "relative to the number of features."
+            )
 
-        # --------------------------------------------------------
-        # Classification needs enough examples per class
-        # --------------------------------------------------------
-        #
-        # Detailed class-balance checks can be added later.
-        # --------------------------------------------------------
+            return {
+
+                "safe":
+                    False,
+
+                "recommendation":
+                    "UNSAFE",
+
+                "reason":
+                    "Feature-to-sample ratio is too high.",
+
+                "warnings":
+                    warnings,
+            }
+
+        # ========================================================
+        # 3. Classification checks
+        # ========================================================
 
         if (
             problem_type
             == "CLASSIFICATION"
-            and rows < 50
         ):
 
-            return "UNSAFE"
+            if rows < cls.MIN_CLASSIFICATION_ROWS:
 
-        return "SAFE"
+                warnings.append(
+                    "Classification dataset contains "
+                    f"fewer than "
+                    f"{cls.MIN_CLASSIFICATION_ROWS} "
+                    "samples."
+                )
+
+                return {
+
+                    "safe":
+                        False,
+
+                    "recommendation":
+                        "UNSAFE",
+
+                    "reason":
+                        "Too few samples for reliable "
+                        "classification.",
+
+                    "warnings":
+                        warnings,
+                }
+
+            if (
+                min_class_samples is not None
+                and
+                min_class_samples
+                < cls.MIN_SAMPLES_PER_CLASS
+            ):
+
+                warnings.append(
+                    "At least one class contains fewer "
+                    f"than "
+                    f"{cls.MIN_SAMPLES_PER_CLASS} "
+                    "samples."
+                )
+
+                return {
+
+                    "safe":
+                        False,
+
+                    "recommendation":
+                        "UNSAFE",
+
+                    "reason":
+                        "One or more classes have "
+                        "insufficient samples.",
+
+                    "warnings":
+                        warnings,
+                }
+
+        # ========================================================
+        # 4. Small dataset caution
+        # ========================================================
+
+        if rows < cls.CAUTION_ROWS:
+
+            warnings.append(
+                "Dataset is small. Model performance "
+                "may be unstable and should be interpreted "
+                "with caution."
+            )
+
+            return {
+
+                "safe":
+                    True,
+
+                "recommendation":
+                    "CAUTION",
+
+                "reason":
+                    "Dataset is usable but small.",
+
+                "warnings":
+                    warnings,
+            }
+
+        # ========================================================
+        # 5. High dimensionality warning
+        # ========================================================
+
+        if (
+            feature_count > 0
+            and
+            samples_per_feature
+            < cls.HIGH_DIMENSIONAL_SAMPLES_PER_FEATURE
+        ):
+
+            warnings.append(
+                "Dataset has relatively few samples "
+                "per feature. Model selection should "
+                "prefer simpler models."
+            )
+
+            return {
+
+                "safe":
+                    True,
+
+                "recommendation":
+                    "CAUTION",
+
+                "reason":
+                    "Dataset has limited samples "
+                    "relative to feature count.",
+
+                "warnings":
+                    warnings,
+            }
+
+        # ========================================================
+        # 6. Normal dataset
+        # ========================================================
+
+        return {
+
+            "safe":
+                True,
+
+            "recommendation":
+                "SAFE",
+
+            "reason":
+                "Dataset contains sufficient samples "
+                "for automated model selection.",
+
+            "warnings":
+                warnings,
+        }
 
     # ============================================================
     # Display
@@ -715,7 +989,10 @@ class DatasetProfiler:
         profile: Dict[str, Any],
     ) -> None:
         """
-        Print dataset profile to terminal.
+        Display the dataset profile.
+
+        Warnings are deliberately displayed at the END so the
+        normal dataset information remains easy to read.
         """
 
         print(
@@ -730,6 +1007,10 @@ class DatasetProfiler:
         print(
             "=" * 60
         )
+
+        # --------------------------------------------------------
+        # Basic information
+        # --------------------------------------------------------
 
         print(
             f"\nRows                 : "
@@ -751,6 +1032,10 @@ class DatasetProfiler:
             f"{profile['categorical_feature_count']}"
         )
 
+        # --------------------------------------------------------
+        # Dataset size
+        # --------------------------------------------------------
+
         print(
             f"Dataset size         : "
             f"{profile['dataset_size']}"
@@ -762,9 +1047,18 @@ class DatasetProfiler:
         )
 
         print(
+            f"Samples/feature      : "
+            f"{profile['samples_per_feature']}"
+        )
+
+        print(
             f"Feature/sample level : "
             f"{profile['dimensionality']}"
         )
+
+        # --------------------------------------------------------
+        # Problem
+        # --------------------------------------------------------
 
         print(
             f"Problem type         : "
@@ -776,6 +1070,10 @@ class DatasetProfiler:
             f"{profile['target_unique_values']}"
         )
 
+        # --------------------------------------------------------
+        # Data quality
+        # --------------------------------------------------------
+
         print(
             f"Missing values       : "
             f"{profile['missing_values']}"
@@ -786,33 +1084,97 @@ class DatasetProfiler:
             f"{profile['duplicate_rows']}"
         )
 
+        # --------------------------------------------------------
+        # Complexity
+        # --------------------------------------------------------
+
         print(
             f"Dataset complexity   : "
             f"{profile['dataset_complexity']}"
         )
 
-        # --------------------------------------------------------
-        # Training safety
-        # --------------------------------------------------------
+        # ========================================================
+        # Training Recommendation
+        # ========================================================
+
+        print(
+            "\n"
+            + "=" * 60
+        )
+
+        print(
+            "TRAINING RECOMMENDATION"
+        )
+
+        print(
+            "=" * 60
+        )
 
         print(
             f"\nTraining safety      : "
             f"{profile['training_recommendation']}"
         )
 
-        if not profile[
-            "training_safe"
-        ]:
+        print(
+            f"Training allowed     : "
+            f"{profile['training_safe']}"
+        )
+
+        print(
+            f"Reason               : "
+            f"{profile['training_reason']}"
+        )
+
+        # ========================================================
+        # Warning at END
+        # ========================================================
+
+        warnings = profile[
+            "training_warnings"
+        ]
+
+        if warnings:
 
             print(
-                "\nWARNING:"
+                "\n"
+                + "!" * 60
             )
 
             print(
-                "Dataset is too small or "
-                "too complex for reliable "
-                "automatic model training."
+                "WARNING"
             )
+
+            print(
+                "!" * 60
+            )
+
+            for warning in warnings:
+
+                print(
+                    f"\n⚠ {warning}"
+                )
+
+            if not profile[
+                "training_safe"
+            ]:
+
+                print(
+                    "\nAutomatic model training "
+                    "is not recommended for this dataset."
+                )
+
+                print(
+                    "You may still choose to proceed "
+                    "manually if you understand the risks."
+                )
+
+            else:
+
+                print(
+                    "\nAutomated training can proceed, "
+                    "but results should be interpreted "
+                    "with caution."
+                )
 
         print(
             "\nDataset profiling completed."
