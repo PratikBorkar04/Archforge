@@ -1,0 +1,243 @@
+{
+    "problem_type": "REGRESSION",
+    "evaluation_source": "test",
+    "evaluation_samples": 400,
+    "evaluation_features": 15,
+    "primary_metric": "r2_score",
+    "best_model": "ElasticNet",
+    "best_model_score": -0.004624409904995019,
+    "models": {
+        "LinearRegression": {
+            "status": "SUCCESS",
+            "metrics": {
+                "mae": 243241.97758826384,
+                "mse": 78321466146.0328,
+                "rmse": 279859.72583784326,
+                "r2_score": -0.006717808430749761
+            },
+            "primary_metric": "r2_score",
+            "primary_score": -0.006717808430749761
+        },
+        "Ridge": {
+            "status": "SUCCESS",
+            "metrics": {
+                "mae": 243243.24396400808,
+                "mse": 78321118364.30557,
+                "rmse": 279859.10448707145,
+                "r2_score": -0.006713338161288718
+            },
+            "primary_metric": "r2_score",
+            "primary_score": -0.006713338161288718
+        },
+        "Lasso": {
+            "status": "SUCCESS",
+            "metrics": {
+                "mae": 243241.90349072457,
+                "mse": 78321327320.97752,
+                "rmse": 279859.47781159304,
+                "r2_score": -0.006716024020136713
+            },
+            "primary_metric": "r2_score",
+            "primary_score": -0.006716024020136713
+        },
+        "ElasticNet": {
+            "status": "SUCCESS",
+            "metrics": {
+                "mae": 243360.55384322544,
+                "mse": 78158602193.1038,
+                "rmse": 279568.6001558541,
+                "r2_score": -0.004624409904995019
+            },
+            "primary_metric": "r2_score",
+            "primary_score": -0.004624409904995019
+        },
+        "DecisionTreeRegressor": {
+            "status": "SUCCESS",
+            "metrics": {
+                "mae": 332170.07,
+                "mse": 164126331062.57,
+                "rmse": 405125.0807621888,
+                "r2_score": -1.1096247101020267
+            },
+            "primary_metric": "r2_score",
+            "primary_score": -1.1096247101020267
+        },
+        "RandomForestRegressor": {
+            "status": "SUCCESS",
+            "metrics": {
+                "mae": 254587.840175,
+                "mse": 86571527999.46388,
+                "rmse": 294230.39951620204,
+                "r2_score": -0.1127613313267386
+            },
+            "primary_metric": "r2_score",
+            "primary_score": -0.1127613313267386
+        },
+        "GradientBoostingRegressor": {
+            "status": "SUCCESS",
+            "metrics": {
+                "mae": 247431.9456041527,
+                "mse": 81726706114.46706,
+                "rmse": 285878.8311758446,
+                "r2_score": -0.05048761876360408
+            },
+            "primary_metric": "r2_score",
+            "primary_score": -0.05048761876360408
+        },
+        "AdaBoostRegressor": {
+            "status": "SUCCESS",
+            "metrics": {
+                "mae": 244976.8941892205,
+                "mse": 79242757531.18347,
+                "rmse": 281500.90147490375,
+                "r2_score": -0.018559778325129672
+            },
+            "primary_metric": "r2_score",
+            "primary_score": -0.018559778325129672
+        },
+        "XGBRegressor": {
+            "status": "SUCCESS",
+            "metrics": {
+                "mae": 251006.765625,
+                "mse": 84238802944.0,
+                "rmse": 290239.2167574878,
+                "r2_score": -0.08277726173400879
+            },
+            "primary_metric": "r2_score",
+            "primary_score": -0.08277726173400879
+        },
+        "CatBoostRegressor": {
+            "status": "SUCCESS",
+            "metrics": {
+                "mae": 249632.8785967461,
+                "mse": 82777506828.28745,
+                "rmse": 287710.8041563393,
+                "r2_score": -0.06399425805125869
+            },
+            "primary_metric": "r2_score",
+            "primary_score": -0.06399425805125869
+        }
+    },
+    "ranking": [
+        {
+            "rank": 1,
+            "model": "ElasticNet",
+            "primary_metric": "r2_score",
+            "primary_score": -0.004624409904995019,
+            "metrics": {
+                "mae": 243360.55384322544,
+                "mse": 78158602193.1038,
+                "rmse": 279568.6001558541,
+                "r2_score": -0.004624409904995019
+            }
+        },
+        {
+            "rank": 2,
+            "model": "Ridge",
+            "primary_metric": "r2_score",
+            "primary_score": -0.006713338161288718,
+            "metrics": {
+                "mae": 243243.24396400808,
+                "mse": 78321118364.30557,
+                "rmse": 279859.10448707145,
+                "r2_score": -0.006713338161288718
+            }
+        },
+        {
+            "rank": 3,
+            "model": "Lasso",
+            "primary_metric": "r2_score",
+            "primary_score": -0.006716024020136713,
+            "metrics": {
+                "mae": 243241.90349072457,
+                "mse": 78321327320.97752,
+                "rmse": 279859.47781159304,
+                "r2_score": -0.006716024020136713
+            }
+        },
+        {
+            "rank": 4,
+            "model": "LinearRegression",
+            "primary_metric": "r2_score",
+            "primary_score": -0.006717808430749761,
+            "metrics": {
+                "mae": 243241.97758826384,
+                "mse": 78321466146.0328,
+                "rmse": 279859.72583784326,
+                "r2_score": -0.006717808430749761
+            }
+        },
+        {
+            "rank": 5,
+            "model": "AdaBoostRegressor",
+            "primary_metric": "r2_score",
+            "primary_score": -0.018559778325129672,
+            "metrics": {
+                "mae": 244976.8941892205,
+                "mse": 79242757531.18347,
+                "rmse": 281500.90147490375,
+                "r2_score": -0.018559778325129672
+            }
+        },
+        {
+            "rank": 6,
+            "model": "GradientBoostingRegressor",
+            "primary_metric": "r2_score",
+            "primary_score": -0.05048761876360408,
+            "metrics": {
+                "mae": 247431.9456041527,
+                "mse": 81726706114.46706,
+                "rmse": 285878.8311758446,
+                "r2_score": -0.05048761876360408
+            }
+        },
+        {
+            "rank": 7,
+            "model": "CatBoostRegressor",
+            "primary_metric": "r2_score",
+            "primary_score": -0.06399425805125869,
+            "metrics": {
+                "mae": 249632.8785967461,
+                "mse": 82777506828.28745,
+                "rmse": 287710.8041563393,
+                "r2_score": -0.06399425805125869
+            }
+        },
+        {
+            "rank": 8,
+            "model": "XGBRegressor",
+            "primary_metric": "r2_score",
+            "primary_score": -0.08277726173400879,
+            "metrics": {
+                "mae": 251006.765625,
+                "mse": 84238802944.0,
+                "rmse": 290239.2167574878,
+                "r2_score": -0.08277726173400879
+            }
+        },
+        {
+            "rank": 9,
+            "model": "RandomForestRegressor",
+            "primary_metric": "r2_score",
+            "primary_score": -0.1127613313267386,
+            "metrics": {
+                "mae": 254587.840175,
+                "mse": 86571527999.46388,
+                "rmse": 294230.39951620204,
+                "r2_score": -0.1127613313267386
+            }
+        },
+        {
+            "rank": 10,
+            "model": "DecisionTreeRegressor",
+            "primary_metric": "r2_score",
+            "primary_score": -1.1096247101020267,
+            "metrics": {
+                "mae": 332170.07,
+                "mse": 164126331062.57,
+                "rmse": 405125.0807621888,
+                "r2_score": -1.1096247101020267
+            }
+        }
+    ]
+}
