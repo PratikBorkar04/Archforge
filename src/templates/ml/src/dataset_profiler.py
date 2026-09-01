@@ -31,12 +31,15 @@ from typing import Dict, Any
 
 import numpy as np
 import pandas as pd
+
+
 # ============================================================
 # Terminal Colors
 # ============================================================
 
 YELLOW = "\033[93m"
 RESET = "\033[0m"
+
 
 class DatasetProfiler:
     """
@@ -56,23 +59,46 @@ class DatasetProfiler:
     # Training Safety Thresholds
     # ============================================================
 
-    # Absolute minimum number of rows.
     ABSOLUTE_MIN_ROWS = 20
 
-    # Dataset below this is usable only with strong caution.
     CAUTION_ROWS = 50
 
-    # Minimum samples per feature for normal automated training.
     MIN_SAMPLES_PER_FEATURE = 5
 
-    # Minimum samples per feature for high-dimensional datasets.
     HIGH_DIMENSIONAL_SAMPLES_PER_FEATURE = 10
 
-    # Minimum number of samples expected for classification.
     MIN_CLASSIFICATION_ROWS = 50
 
-    # Minimum examples per class for reliable classification.
     MIN_SAMPLES_PER_CLASS = 5
+
+    # ============================================================
+    # Classification Detection Thresholds
+    # ============================================================
+
+    # Maximum number of unique numerical values that can
+    # automatically be considered classification.
+    #
+    # Examples:
+    #
+    # 0 / 1
+    # 1 / 2 / 3 / 4 / 5
+    # Play / Not Play is handled separately as string data.
+    #
+    NUMERICAL_CLASSIFICATION_UNIQUE_THRESHOLD = 10
+
+    # If the number of unique numerical values is a very
+    # small fraction of the total number of samples, consider
+    # the target classification.
+    #
+    # Example:
+    #
+    # 5 unique values / 1000 samples
+    #
+    # 5 / 1000 = 0.005
+    #
+    # -> CLASSIFICATION
+    #
+    NUMERICAL_CLASSIFICATION_RATIO_THRESHOLD = 0.05
 
     # ============================================================
     # Initialization
@@ -491,8 +517,9 @@ class DatasetProfiler:
     # Problem Type Detection
     # ============================================================
 
-    @staticmethod
+    @classmethod
     def _detect_problem_type(
+        cls,
         target: pd.Series,
     ) -> str:
         """
@@ -501,30 +528,57 @@ class DatasetProfiler:
         Rules
         -----
 
-        Object / string / category / bool
+        String / object / category / bool
             -> CLASSIFICATION
 
         Numerical binary target
             -> CLASSIFICATION
 
-        Small discrete integer target
+        Numerical target with <= 10 unique values
+            -> CLASSIFICATION
+
+        Numerical target with a very small
+        unique-value ratio
             -> CLASSIFICATION
 
         Otherwise numerical target
             -> REGRESSION
 
-        Important:
-        A numerical target with only a few values is not
-        automatically classification.
+        Examples
+        --------
 
-        Example:
+        yes / no
+            -> CLASSIFICATION
 
-            Price:
+        play / not play
+            -> CLASSIFICATION
+
+        male / female
+            -> CLASSIFICATION
+
+        A / B / C
+            -> CLASSIFICATION
+
+        0 / 1
+            -> CLASSIFICATION
+
+        1 / 2 / 3 / 4 / 5
+            -> CLASSIFICATION
+
+        5 unique values / 1000 samples
+            5 / 1000 = 0.005
+            -> CLASSIFICATION
+
+        500 unique values / 1000 samples
+            500 / 1000 = 0.50
+            -> REGRESSION
+
+        Price:
             100000
             200000
             300000
-
-        remains REGRESSION.
+            ...
+            -> REGRESSION
         """
 
         target = target.dropna()
@@ -536,9 +590,9 @@ class DatasetProfiler:
                 "no valid values."
             )
 
-        # --------------------------------------------------------
+        # ========================================================
         # Boolean
-        # --------------------------------------------------------
+        # ========================================================
 
         if pd.api.types.is_bool_dtype(
             target
@@ -546,12 +600,28 @@ class DatasetProfiler:
 
             return "CLASSIFICATION"
 
-        # --------------------------------------------------------
-        # Object / String / Category
-        # --------------------------------------------------------
+        # ========================================================
+        # String / Object / Category
+        # ========================================================
+
+        # IMPORTANT:
+        #
+        # pd.api.types.is_object_dtype()
+        # does not necessarily detect Arrow-backed
+        # string columns.
+        #
+        # For example:
+        #
+        # dtype: str
+        #
+        # Therefore is_string_dtype() is also required.
 
         if (
             pd.api.types.is_object_dtype(
+                target
+            )
+            or
+            pd.api.types.is_string_dtype(
                 target
             )
             or
@@ -563,9 +633,9 @@ class DatasetProfiler:
 
             return "CLASSIFICATION"
 
-        # --------------------------------------------------------
+        # ========================================================
         # Numerical
-        # --------------------------------------------------------
+        # ========================================================
 
         if pd.api.types.is_numeric_dtype(
             target
@@ -575,8 +645,19 @@ class DatasetProfiler:
                 target.nunique()
             )
 
-            total_values = len(
+            total_samples = len(
                 target
+            )
+
+            # ----------------------------------------------------
+            # Unique-value ratio
+            # ----------------------------------------------------
+
+            unique_ratio = (
+                unique_values
+                / total_samples
+                if total_samples > 0
+                else 1.0
             )
 
             # ----------------------------------------------------
@@ -588,26 +669,26 @@ class DatasetProfiler:
                 return "CLASSIFICATION"
 
             # ----------------------------------------------------
-            # Discrete integer target
+            # Small discrete numerical target
             # ----------------------------------------------------
 
-            if pd.api.types.is_integer_dtype(
-                target
+            if (
+                unique_values
+                <= cls.NUMERICAL_CLASSIFICATION_UNIQUE_THRESHOLD
             ):
 
-                unique_ratio = (
-                    unique_values
-                    / total_values
-                    if total_values > 0
-                    else 1.0
-                )
+                return "CLASSIFICATION"
 
-                if (
-                    unique_values <= 20
-                    and unique_ratio <= 0.05
-                ):
+            # ----------------------------------------------------
+            # Low unique-value ratio
+            # ----------------------------------------------------
 
-                    return "CLASSIFICATION"
+            if (
+                unique_ratio
+                <= cls.NUMERICAL_CLASSIFICATION_RATIO_THRESHOLD
+            ):
+
+                return "CLASSIFICATION"
 
             # ----------------------------------------------------
             # Continuous numerical target
@@ -615,9 +696,9 @@ class DatasetProfiler:
 
             return "REGRESSION"
 
-        # --------------------------------------------------------
+        # ========================================================
         # Fallback
-        # --------------------------------------------------------
+        # ========================================================
 
         return "REGRESSION"
 
