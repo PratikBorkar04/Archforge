@@ -6,24 +6,38 @@ Model saving component for ArchForge.
 Responsibilities
 ----------------
 1. Receive the best trained model from ModelEvaluation.
-2. Save the model as a serialized artifact.
+2. Save the trained model.
 3. Save model metadata.
-4. Save feature and target information.
-5. Save information about the evaluation used to select the model.
-6. Return paths to the saved artifacts.
+4. Save the target column.
+5. Save the original feature columns.
+6. Preserve feature ordering.
+7. Save evaluation information.
+8. Provide prediction-time schema information.
 
-This module does NOT:
-- Train models.
-- Evaluate models.
-- Select models.
+Important
+---------
+The target column is NEVER assumed to be the last column.
 
-Those responsibilities belong to:
-- model_trainer.py
-- model_evaluation.py
+The exact target_column detected/selected by the training pipeline
+is used to determine the feature columns.
+
+This allows ArchForge to work with datasets such as:
+
+    ID | Selling_Price | Year | Present_Price | ...
+
+or:
+
+    Year | Area | Bedrooms | Price | Location
+
+or:
+
+    Price | Feature_A | Feature_B | Feature_C
+
+The target may appear anywhere in the dataframe.
 """
 
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 
 import json
 import pickle
@@ -46,9 +60,9 @@ class ModelPusher:
         project_root: Path,
     ) -> None:
 
-        self.project_root = Path(
-            project_root
-        ).resolve()
+        self.project_root = (
+            Path(project_root).resolve()
+        )
 
         self.model_dir = (
             self.project_root
@@ -74,9 +88,13 @@ class ModelPusher:
         problem_type: str,
         evaluation_source: str,
         evaluation_samples: int,
-        evaluation_report: Dict[str, Any] = None,
-        target_column: str = None,
-        feature_columns: list = None,
+        evaluation_report: Optional[
+            Dict[str, Any]
+        ] = None,
+        target_column: Optional[str] = None,
+        feature_columns: Optional[
+            List[str]
+        ] = None,
     ) -> Dict[str, Any]:
         """
         Save the best model and its metadata.
@@ -90,7 +108,7 @@ class ModelPusher:
             Name of the selected model.
 
         best_model_score:
-            Best model's primary evaluation score.
+            Best model evaluation score.
 
         primary_metric:
             Metric used for model selection.
@@ -102,16 +120,20 @@ class ModelPusher:
             validation or test.
 
         evaluation_samples:
-            Number of samples used during evaluation.
+            Number of samples used for evaluation.
 
         evaluation_report:
-            Complete evaluation report, when available.
+            Complete evaluation report.
 
         target_column:
-            Name of the target column.
+            Exact target column detected/selected during training.
 
         feature_columns:
-            Original feature column names used by the model.
+            Original feature columns used to train the model.
+
+            IMPORTANT:
+            The target column can appear anywhere in the dataset.
+            feature_columns must already exclude target_column.
 
         Returns
         -------
@@ -119,9 +141,9 @@ class ModelPusher:
             Information about saved model artifacts.
         """
 
-        # --------------------------------------------------------
+        # ========================================================
         # Validate inputs
-        # --------------------------------------------------------
+        # ========================================================
 
         if best_model is None:
 
@@ -159,9 +181,9 @@ class ModelPusher:
                 "Feature columns are required."
             )
 
-        # --------------------------------------------------------
+        # ========================================================
         # Normalize values
-        # --------------------------------------------------------
+        # ========================================================
 
         problem_type = (
             str(problem_type)
@@ -175,19 +197,37 @@ class ModelPusher:
             .lower()
         )
 
-        target_column = (
-            str(target_column)
-            .strip()
-        )
+        target_column = str(
+            target_column
+        ).strip()
 
         feature_columns = [
             str(column).strip()
             for column in feature_columns
         ]
 
-        # --------------------------------------------------------
+        # ========================================================
+        # Validate feature/target relationship
+        # ========================================================
+
+        if target_column in feature_columns:
+
+            raise ValueError(
+                "Target column was included in "
+                "feature_columns. This would cause "
+                "target leakage."
+            )
+
+        if len(feature_columns) == 0:
+
+            raise ValueError(
+                "No feature columns remain after "
+                "removing the target column."
+            )
+
+        # ========================================================
         # File paths
-        # --------------------------------------------------------
+        # ========================================================
 
         model_path = (
             self.model_dir
@@ -199,12 +239,13 @@ class ModelPusher:
             / "model_metadata.json"
         )
 
-        # --------------------------------------------------------
-        # Save model
-        # --------------------------------------------------------
+        # ========================================================
+        # Console header
+        # ========================================================
 
         print(
-            "\n" + "=" * 60
+            "\n"
+            + "=" * 60
         )
 
         print(
@@ -216,32 +257,43 @@ class ModelPusher:
         )
 
         print(
-            f"Model: {best_model_name}"
+            f"Model              : "
+            f"{best_model_name}"
         )
 
         print(
-            f"Primary metric: {primary_metric}"
+            f"Problem type       : "
+            f"{problem_type}"
         )
 
         print(
-            f"Score: "
-            f"{self._format_score(best_model_score)}"
-        )
-
-        print(
-            f"Evaluation source: "
-            f"{evaluation_source}"
-        )
-
-        print(
-            f"Target column: "
+            f"Target column      : "
             f"{target_column}"
         )
 
         print(
-            f"Input features: "
+            f"Input feature count: "
             f"{len(feature_columns)}"
         )
+
+        print(
+            f"Primary metric     : "
+            f"{primary_metric}"
+        )
+
+        print(
+            f"Score              : "
+            f"{self._format_score(best_model_score)}"
+        )
+
+        print(
+            f"Evaluation source  : "
+            f"{evaluation_source}"
+        )
+
+        # ========================================================
+        # Save model
+        # ========================================================
 
         print(
             "\nSaving trained model..."
@@ -265,26 +317,72 @@ class ModelPusher:
             f"  {model_path}"
         )
 
-        # --------------------------------------------------------
+        # ========================================================
         # Build metadata
-        # --------------------------------------------------------
+        # ========================================================
 
         metadata = {
+
+            # ----------------------------------------------------
+            # Model information
+            # ----------------------------------------------------
 
             "model_name":
                 best_model_name,
 
+            "model_class":
+                best_model.__class__.__name__,
+
+            "model_module":
+                best_model.__class__.__module__,
+
+            # ----------------------------------------------------
+            # Problem information
+            # ----------------------------------------------------
+
             "problem_type":
                 problem_type,
+
+            # ----------------------------------------------------
+            # Target information
+            # ----------------------------------------------------
 
             "target_column":
                 target_column,
 
+            # ----------------------------------------------------
+            # Feature information
+            # ----------------------------------------------------
+
             "features":
+                feature_columns,
+
+            "feature_columns":
                 feature_columns,
 
             "feature_count":
                 len(feature_columns),
+
+            # ----------------------------------------------------
+            # Explicit prediction schema
+            # ----------------------------------------------------
+
+            "prediction_schema": {
+
+                "target_column":
+                    target_column,
+
+                "feature_columns":
+                    feature_columns,
+
+                "feature_count":
+                    len(feature_columns),
+
+            },
+
+            # ----------------------------------------------------
+            # Evaluation information
+            # ----------------------------------------------------
 
             "primary_metric":
                 primary_metric,
@@ -302,20 +400,18 @@ class ModelPusher:
                     evaluation_samples
                 ),
 
-            "model_class":
-                best_model.__class__.__name__,
-
-            "model_module":
-                best_model.__class__.__module__,
+            # ----------------------------------------------------
+            # Artifact information
+            # ----------------------------------------------------
 
             "model_path":
                 str(model_path),
 
         }
 
-        # --------------------------------------------------------
+        # ========================================================
         # Add evaluation summary
-        # --------------------------------------------------------
+        # ========================================================
 
         if evaluation_report:
 
@@ -342,9 +438,9 @@ class ModelPusher:
 
             }
 
-        # --------------------------------------------------------
+        # ========================================================
         # Save metadata
-        # --------------------------------------------------------
+        # ========================================================
 
         with open(
             metadata_path,
@@ -357,6 +453,7 @@ class ModelPusher:
                 file,
                 indent=4,
                 default=self._json_converter,
+                allow_nan=False,
             )
 
         print(
@@ -367,12 +464,13 @@ class ModelPusher:
             f"  {metadata_path}"
         )
 
-        # --------------------------------------------------------
+        # ========================================================
         # Summary
-        # --------------------------------------------------------
+        # ========================================================
 
         print(
-            "\n" + "=" * 60
+            "\n"
+            + "=" * 60
         )
 
         print(
@@ -408,14 +506,21 @@ class ModelPusher:
             f"{len(feature_columns)}"
         )
 
-        for column in feature_columns:
+        print(
+            "\nFeature columns:"
+        )
+
+        for index, column in enumerate(
+            feature_columns,
+            start=1,
+        ):
 
             print(
-                f"  • {column}"
+                f"  {index}. {column}"
             )
 
         print(
-            f"Primary metric   : "
+            f"\nPrimary metric   : "
             f"{primary_metric}"
         )
 
@@ -443,9 +548,9 @@ class ModelPusher:
             "\nModel saving completed successfully."
         )
 
-        # --------------------------------------------------------
+        # ========================================================
         # Return results
-        # --------------------------------------------------------
+        # ========================================================
 
         return {
 
@@ -466,6 +571,16 @@ class ModelPusher:
 
             "metadata":
                 metadata,
+
+            "target_column":
+                target_column,
+
+            "feature_columns":
+                feature_columns,
+
+            "feature_count":
+                len(feature_columns),
+
         }
 
     # ============================================================
@@ -486,14 +601,23 @@ class ModelPusher:
 
                 return "N/A"
 
-            if isinstance(
-                score,
-                float,
-            ) and np.isnan(score):
+            numeric_score = float(
+                score
+            )
+
+            if np.isnan(
+                numeric_score
+            ):
 
                 return "NaN"
 
-            return f"{float(score):.4f}"
+            if np.isinf(
+                numeric_score
+            ):
+
+                return "Inf"
+
+            return f"{numeric_score:.4f}"
 
         except (
             TypeError,
@@ -511,7 +635,8 @@ class ModelPusher:
         value: Any,
     ):
         """
-        Convert numeric values to JSON-safe Python floats.
+        Convert numeric values into JSON-safe
+        Python floats.
         """
 
         if value is None:
@@ -554,7 +679,7 @@ class ModelPusher:
         value: Any,
     ):
         """
-        Convert NumPy and Pandas values
+        Convert NumPy and Pandas objects
         into JSON-compatible values.
         """
 

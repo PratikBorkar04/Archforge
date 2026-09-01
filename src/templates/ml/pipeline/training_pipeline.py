@@ -14,6 +14,14 @@ Pipeline
 7. Model Training
 8. Model Evaluation
 9. Model Pushing & Saving
+
+Important
+---------
+The target column is determined once during the pipeline and is
+then explicitly passed to every component that needs it.
+
+The target column may appear ANYWHERE in the dataset. It is never
+assumed to be the first or last column.
 """
 
 from pathlib import Path
@@ -104,6 +112,14 @@ class TrainingPipeline:
 
         print("\n[3/9] Dataset Profiling")
 
+        # --------------------------------------------------------
+        # Determine target ONCE.
+        #
+        # The selected target is then passed through the remaining
+        # pipeline. No later component should independently guess
+        # the target.
+        # --------------------------------------------------------
+
         target_column = (
             self._detect_target_column(
                 train_data
@@ -145,14 +161,50 @@ class TrainingPipeline:
             test_data=test_data,
         )
 
+        # --------------------------------------------------------
+        # Safety check
+        # --------------------------------------------------------
+        #
+        # Cleaning must never remove the selected target.
+        #
+
+        if target_column not in cleaned_train_data.columns:
+
+            raise RuntimeError(
+                "Target column was removed during data cleaning: "
+                f"'{target_column}'"
+            )
+
         # ========================================================
         # 5. DATA TRANSFORMATION
         # ========================================================
 
         print("\n[5/9] Data Transformation")
 
+        # --------------------------------------------------------
+        # IMPORTANT FIX
+        # --------------------------------------------------------
+        #
+        # Explicitly pass the already-selected target column.
+        #
+        # This prevents DataTransformation from independently
+        # guessing the target based on column position.
+        #
+        # Example:
+        #
+        # Area | Price | Bedrooms | Location
+        #
+        # If target_column = "Price", then:
+        #
+        # X = Area, Bedrooms, Location
+        # y = Price
+        #
+        # "Price" will NOT become a model feature.
+        # --------------------------------------------------------
+
         data_transformation = DataTransformation(
-            project_root=self.project_root
+            project_root=self.project_root,
+            target_column=target_column,
         )
 
         transformed_data = (
@@ -163,6 +215,54 @@ class TrainingPipeline:
                 test_data=cleaned_test_data,
             )
         )
+
+        # --------------------------------------------------------
+        # Safety check
+        # --------------------------------------------------------
+        #
+        # Verify that the target did not accidentally enter the
+        # transformed feature names.
+        #
+        # This is especially important for generic datasets where
+        # the target can appear anywhere.
+        # --------------------------------------------------------
+
+        transformed_feature_names = (
+            transformed_data.get(
+                "feature_names",
+                [],
+            )
+        )
+
+        if target_column in transformed_feature_names:
+
+            raise RuntimeError(
+                "Target column was incorrectly included "
+                "in transformed features: "
+                f"'{target_column}'"
+            )
+
+        # Also check transformed feature names that may contain
+        # transformer prefixes such as:
+        #
+        # numerical__Price
+        # categorical__Price_x
+        #
+        target_feature_prefixes = (
+            f"__{target_column}"
+        )
+
+        for feature_name in transformed_feature_names:
+
+            if str(feature_name).endswith(
+                target_feature_prefixes
+            ):
+
+                raise RuntimeError(
+                    "Target column appears in transformed "
+                    "feature names: "
+                    f"'{feature_name}'"
+                )
 
         # ========================================================
         # 6. MODEL SELECTION
@@ -246,21 +346,58 @@ class TrainingPipeline:
         )
 
         # --------------------------------------------------------
-        # Determine original input feature columns
+        # Determine ORIGINAL input feature columns.
+        #
+        # IMPORTANT:
+        #
+        # The target is removed by NAME, not by position.
+        #
+        # Therefore the target may be anywhere in the dataframe.
         # --------------------------------------------------------
-        #
-        # These are the columns that the user will eventually
-        # provide to the generic prediction UI.
-        #
-        # We use the cleaned training dataframe because identifier
-        # columns such as "Id" may already have been removed.
-        #
 
         feature_columns = [
             column
             for column in cleaned_train_data.columns
             if column != target_column
         ]
+
+        # --------------------------------------------------------
+        # Safety check
+        # --------------------------------------------------------
+
+        if target_column in feature_columns:
+
+            raise RuntimeError(
+                "Target column was incorrectly included "
+                "in model feature columns: "
+                f"'{target_column}'"
+            )
+
+        if not feature_columns:
+
+            raise RuntimeError(
+                "No input features remain after removing "
+                f"target column '{target_column}'."
+            )
+
+        # --------------------------------------------------------
+        # Display final feature information
+        # --------------------------------------------------------
+
+        print(
+            "\nFinal model input features:"
+        )
+
+        for column in feature_columns:
+
+            print(
+                f"  • {column}"
+            )
+
+        print(
+            f"\nTarget column excluded from features:"
+            f" {target_column}"
+        )
 
         # --------------------------------------------------------
         # Push best model
@@ -390,6 +527,14 @@ class TrainingPipeline:
     ) -> str:
         """
         Detect the most likely target column.
+
+        The target is NOT assumed to be the first or last column.
+
+        ArchForge first checks whether an upstream component has
+        explicitly stored a target column in DataFrame attributes.
+
+        If not, candidate scoring is used. If the result is
+        ambiguous, the user is asked to select the target.
         """
 
         if train_data is None:
@@ -415,6 +560,10 @@ class TrainingPipeline:
                 "at least two columns."
             )
 
+        # --------------------------------------------------------
+        # Check explicitly provided target metadata
+        # --------------------------------------------------------
+
         metadata_target = (
             train_data.attrs.get(
                 "target_column"
@@ -426,7 +575,17 @@ class TrainingPipeline:
             and metadata_target in columns
         ):
 
+            print(
+                "Target column obtained from "
+                "dataset metadata: "
+                f"{metadata_target}"
+            )
+
             return metadata_target
+
+        # --------------------------------------------------------
+        # Build candidates
+        # --------------------------------------------------------
 
         candidates = (
             self._build_target_candidates(
@@ -440,6 +599,10 @@ class TrainingPipeline:
                 "Unable to generate target "
                 "column candidates."
             )
+
+        # --------------------------------------------------------
+        # Sort candidates by score
+        # --------------------------------------------------------
 
         candidates.sort(
             key=lambda item: item[1],
@@ -459,10 +622,19 @@ class TrainingPipeline:
             best_score - second_score
         )
 
+        # --------------------------------------------------------
+        # Accept only sufficiently confident detection
+        # --------------------------------------------------------
+
         if (
             best_score >= 70
             and score_gap >= 15
         ):
+
+            print(
+                "Target automatically detected: "
+                f"{best_column}"
+            )
 
             return best_column
 
@@ -471,7 +643,16 @@ class TrainingPipeline:
             and score_gap >= 20
         ):
 
+            print(
+                "Target automatically detected: "
+                f"{best_column}"
+            )
+
             return best_column
+
+        # --------------------------------------------------------
+        # Ambiguous target
+        # --------------------------------------------------------
 
         print(
             "\nTarget column could not be "
@@ -506,12 +687,20 @@ class TrainingPipeline:
             "an ambiguous target."
         )
 
+        # --------------------------------------------------------
+        # User selection
+        # --------------------------------------------------------
+
         while True:
 
             choice = input(
                 "\nSelect target column "
                 "(number or exact name): "
             ).strip()
+
+            # ----------------------------------------------------
+            # Selection by candidate number
+            # ----------------------------------------------------
 
             if choice.isdigit():
 
@@ -535,6 +724,10 @@ class TrainingPipeline:
                     )
 
                     return selected
+
+            # ----------------------------------------------------
+            # Selection by exact column name
+            # ----------------------------------------------------
 
             if choice in columns:
 
@@ -574,6 +767,10 @@ class TrainingPipeline:
             score = 0.0
             reasons = []
 
+            # ----------------------------------------------------
+            # Identifier penalty
+            # ----------------------------------------------------
+
             if self._looks_like_identifier(
                 series,
                 column,
@@ -584,6 +781,10 @@ class TrainingPipeline:
                 reasons.append(
                     "identifier-like"
                 )
+
+            # ----------------------------------------------------
+            # Target-name score
+            # ----------------------------------------------------
 
             name_score = (
                 self._target_name_score(
@@ -598,6 +799,10 @@ class TrainingPipeline:
                 reasons.append(
                     "target-like name"
                 )
+
+            # ----------------------------------------------------
+            # Numerical columns
+            # ----------------------------------------------------
 
             if pd.api.types.is_numeric_dtype(
                 series
@@ -656,6 +861,10 @@ class TrainingPipeline:
                         "high target uniqueness"
                     )
 
+            # ----------------------------------------------------
+            # Categorical columns
+            # ----------------------------------------------------
+
             else:
 
                 unique_count = (
@@ -703,6 +912,10 @@ class TrainingPipeline:
                         "high-cardinality"
                     )
 
+            # ----------------------------------------------------
+            # Missing-value score
+            # ----------------------------------------------------
+
             missing_ratio = (
                 series.isnull().mean()
             )
@@ -731,6 +944,10 @@ class TrainingPipeline:
                     "many missing values"
                 )
 
+            # ----------------------------------------------------
+            # Constant-column penalty
+            # ----------------------------------------------------
+
             if (
                 series.nunique(
                     dropna=True
@@ -743,6 +960,10 @@ class TrainingPipeline:
                 reasons.append(
                     "constant column"
                 )
+
+            # ----------------------------------------------------
+            # Empty-column penalty
+            # ----------------------------------------------------
 
             if (
                 series.notna().sum()
@@ -782,6 +1003,12 @@ class TrainingPipeline:
     def _target_name_score(
         column: str,
     ) -> float:
+        """
+        Give higher scores to commonly used target names.
+
+        This is only a heuristic. The target is never assumed
+        from column position.
+        """
 
         name = str(
             column
@@ -856,6 +1083,10 @@ class TrainingPipeline:
         series: pd.Series,
         column: str,
     ) -> bool:
+        """
+        Detect identifier-like columns so they receive a strong
+        penalty during target candidate scoring.
+        """
 
         name = str(
             column
@@ -949,6 +1180,9 @@ class TrainingPipeline:
         self,
         train_data: pd.DataFrame,
     ) -> str:
+        """
+        Return the detected target column.
+        """
 
         return self._detect_target_column(
             train_data

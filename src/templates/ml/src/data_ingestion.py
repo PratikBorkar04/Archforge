@@ -100,11 +100,25 @@ class DataIngestion:
     ) -> pd.DataFrame:
         """
         Read a CSV dataset safely.
+
+        Automatically detects the delimiter used
+        by the dataset.
+
+        Supported common delimiters include:
+
+            ,
+            ;
+            \\t
+            |
         """
 
         try:
 
-            data = pd.read_csv(file)
+            data = pd.read_csv(
+                file,
+                sep=None,
+                engine="python",
+            )
 
         except Exception as exc:
 
@@ -119,6 +133,16 @@ class DataIngestion:
             raise ValueError(
                 f"\nDataset is empty:\n"
                 f"{file.name}"
+            )
+
+        if len(data.columns) < 2:
+
+            raise ValueError(
+                f"\nDataset must contain at least "
+                f"two columns.\n\n"
+                f"File: {file.name}\n"
+                f"Detected columns: "
+                f"{list(data.columns)}"
             )
 
         return data

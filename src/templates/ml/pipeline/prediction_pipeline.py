@@ -7,12 +7,14 @@ Responsibilities
 ----------------
 1. Load the trained model.
 2. Load the fitted preprocessor.
-3. Discover the original input feature schema.
-4. Identify numerical and categorical features.
-5. Provide categorical values for UI generation.
-6. Validate user input.
-7. Apply the same preprocessing used during training.
-8. Generate predictions.
+3. Load model metadata.
+4. Discover the original input feature schema.
+5. Identify numerical and categorical features.
+6. Provide categorical values for UI generation.
+7. Validate user input.
+8. Apply the same preprocessing used during training.
+9. Generate predictions.
+10. Provide prediction information to the generic UI.
 
 This module does NOT:
 - Train models.
@@ -50,6 +52,10 @@ class PredictionPipeline:
             project_root
         ).resolve()
 
+        # --------------------------------------------------------
+        # Model artifact
+        # --------------------------------------------------------
+
         self.model_path = (
             self.project_root
             / "artifacts"
@@ -57,11 +63,19 @@ class PredictionPipeline:
             / "best_model.pkl"
         )
 
+        # --------------------------------------------------------
+        # Preprocessor artifact
+        # --------------------------------------------------------
+
         self.preprocessor_path = (
             self.project_root
             / "artifacts"
             / "preprocessor.pkl"
         )
+
+        # --------------------------------------------------------
+        # Model metadata
+        # --------------------------------------------------------
 
         self.metadata_path = (
             self.project_root
@@ -70,11 +84,17 @@ class PredictionPipeline:
             / "model_metadata.json"
         )
 
-        self.model = None
-        self.preprocessor = None
-        self.metadata = None
+        # --------------------------------------------------------
+        # Loaded artifacts
+        # --------------------------------------------------------
 
-        self.feature_schema = None
+        self.model = None
+
+        self.preprocessor = None
+
+        self.metadata = {}
+
+        self.feature_schema = []
 
     # ============================================================
     # Load Artifacts
@@ -87,8 +107,20 @@ class PredictionPipeline:
         Load model, preprocessor and metadata.
         """
 
+        print(
+            "\n" + "=" * 60
+        )
+
+        print(
+            "LOADING PREDICTION ARTIFACTS"
+        )
+
+        print(
+            "=" * 60
+        )
+
         # --------------------------------------------------------
-        # Validate artifact paths
+        # Validate model
         # --------------------------------------------------------
 
         if not self.model_path.exists():
@@ -97,6 +129,10 @@ class PredictionPipeline:
                 "Trained model artifact was not found:\n"
                 f"{self.model_path}"
             )
+
+        # --------------------------------------------------------
+        # Validate preprocessor
+        # --------------------------------------------------------
 
         if not self.preprocessor_path.exists():
 
@@ -109,6 +145,10 @@ class PredictionPipeline:
         # Load model
         # --------------------------------------------------------
 
+        print(
+            "\nLoading trained model..."
+        )
+
         with open(
             self.model_path,
             "rb",
@@ -118,9 +158,17 @@ class PredictionPipeline:
                 file
             )
 
+        print(
+            "✓ Model loaded."
+        )
+
         # --------------------------------------------------------
         # Load preprocessor
         # --------------------------------------------------------
+
+        print(
+            "Loading preprocessor..."
+        )
 
         with open(
             self.preprocessor_path,
@@ -131,11 +179,19 @@ class PredictionPipeline:
                 file
             )
 
+        print(
+            "✓ Preprocessor loaded."
+        )
+
         # --------------------------------------------------------
         # Load metadata
         # --------------------------------------------------------
 
         if self.metadata_path.exists():
+
+            print(
+                "Loading model metadata..."
+            )
 
             with open(
                 self.metadata_path,
@@ -147,7 +203,15 @@ class PredictionPipeline:
                     file
                 )
 
+            print(
+                "✓ Model metadata loaded."
+            )
+
         else:
+
+            print(
+                "⚠ Model metadata not found."
+            )
 
             self.metadata = {}
 
@@ -159,23 +223,60 @@ class PredictionPipeline:
             self._build_feature_schema()
         )
 
+        # --------------------------------------------------------
+        # Display loaded information
+        # --------------------------------------------------------
+
         print(
-            "\nPrediction artifacts loaded successfully."
+            "\n" + "=" * 60
         )
 
         print(
-            f"Model: "
+            "PREDICTION ARTIFACTS"
+        )
+
+        print(
+            "=" * 60
+        )
+
+        print(
+            f"Model          : "
             f"{self.get_model_name()}"
         )
 
         print(
-            f"Problem type: "
+            f"Problem type   : "
             f"{self.get_problem_type()}"
         )
 
         print(
-            f"Input features: "
+            f"Target column  : "
+            f"{self.get_target_column()}"
+        )
+
+        print(
+            f"Input features : "
             f"{len(self.feature_schema)}"
+        )
+
+        print(
+            "\nFeatures:"
+        )
+
+        for index, feature in enumerate(
+            self.feature_schema,
+            start=1,
+        ):
+
+            print(
+                f"  {index}. "
+                f"{feature['name']} "
+                f"({feature['type']})"
+            )
+
+        print(
+            "\nPrediction artifacts "
+            "loaded successfully."
         )
 
     # ============================================================
@@ -186,13 +287,299 @@ class PredictionPipeline:
         self,
     ) -> List[Dict[str, Any]]:
         """
-        Discover the original input feature schema
-        from the fitted preprocessor.
+        Build the original input feature schema.
 
-        Returns
-        -------
-        List[Dict[str, Any]]
-            Feature definitions for the prediction UI.
+        Metadata is preferred because ModelPusher explicitly
+        stores the original training feature names.
+
+        The fitted preprocessor is used to determine
+        numerical/categorical types and categories.
+        """
+
+        # --------------------------------------------------------
+        # Metadata feature list
+        # --------------------------------------------------------
+
+        metadata_features = (
+            self.metadata.get(
+                "features"
+            )
+        )
+
+        # --------------------------------------------------------
+        # If metadata contains features,
+        # use metadata as the source of truth.
+        # --------------------------------------------------------
+
+        if (
+            metadata_features
+            and isinstance(
+                metadata_features,
+                list,
+            )
+        ):
+
+            schema = []
+
+            for feature_name in (
+                metadata_features
+            ):
+
+                feature_name = str(
+                    feature_name
+                )
+
+                feature_info = (
+                    self._find_feature_in_preprocessor(
+                        feature_name
+                    )
+                )
+
+                if feature_info:
+
+                    schema.append(
+                        feature_info
+                    )
+
+                else:
+
+                    # ------------------------------------------------
+                    # Fallback if preprocessor cannot identify
+                    # the feature.
+                    # ------------------------------------------------
+
+                    schema.append({
+
+                        "name":
+                            feature_name,
+
+                        "type":
+                            "numerical",
+
+                        "input_type":
+                            "number",
+
+                        "categories":
+                            [],
+
+                        "transformer":
+                            "unknown",
+
+                    })
+
+            return schema
+
+        # --------------------------------------------------------
+        # Legacy fallback:
+        # Discover features directly from preprocessor.
+        # --------------------------------------------------------
+
+        return (
+            self._build_schema_from_preprocessor()
+        )
+
+    # ============================================================
+    # Find Feature In Preprocessor
+    # ============================================================
+
+    def _find_feature_in_preprocessor(
+        self,
+        feature_name: str,
+    ) -> Dict[str, Any]:
+        """
+        Find one original feature inside the fitted
+        ColumnTransformer.
+        """
+
+        transformers = getattr(
+            self.preprocessor,
+            "transformers_",
+            None,
+        )
+
+        if transformers is None:
+
+            return {}
+
+        for (
+            transformer_name,
+            transformer,
+            columns,
+        ) in transformers:
+
+            # ----------------------------------------------------
+            # Ignore dropped columns
+            # ----------------------------------------------------
+
+            if transformer == "drop":
+
+                continue
+
+            if columns is None:
+
+                continue
+
+            # ----------------------------------------------------
+            # Normalize columns
+            # ----------------------------------------------------
+
+            if isinstance(
+                columns,
+                str,
+            ):
+
+                columns = [
+                    columns
+                ]
+
+            else:
+
+                try:
+
+                    columns = list(
+                        columns
+                    )
+
+                except TypeError:
+
+                    continue
+
+            if feature_name not in columns:
+
+                continue
+
+            # ----------------------------------------------------
+            # Numerical transformer
+            # ----------------------------------------------------
+
+            if transformer_name in {
+
+                "num",
+                "numerical",
+                "numeric",
+                "numerical_pipeline",
+
+            }:
+
+                return {
+
+                    "name":
+                        feature_name,
+
+                    "type":
+                        "numerical",
+
+                    "input_type":
+                        "number",
+
+                    "categories":
+                        [],
+
+                    "transformer":
+                        transformer_name,
+
+                }
+
+            # ----------------------------------------------------
+            # Categorical transformer
+            # ----------------------------------------------------
+
+            if transformer_name in {
+
+                "cat",
+                "categorical",
+                "categorical_pipeline",
+
+            }:
+
+                categories = (
+                    self._get_categories_for_feature(
+                        transformer,
+                        columns,
+                        feature_name,
+                    )
+                )
+
+                return {
+
+                    "name":
+                        feature_name,
+
+                    "type":
+                        "categorical",
+
+                    "input_type":
+                        "select",
+
+                    "categories":
+                        categories,
+
+                    "transformer":
+                        transformer_name,
+
+                }
+
+            # ----------------------------------------------------
+            # Unknown transformer
+            # ----------------------------------------------------
+
+            inferred_type = (
+                self._infer_transformer_type(
+                    transformer
+                )
+            )
+
+            categories = []
+
+            if (
+                inferred_type
+                == "categorical"
+            ):
+
+                categories = (
+                    self._get_categories_for_feature(
+                        transformer,
+                        columns,
+                        feature_name,
+                    )
+                )
+
+            return {
+
+                "name":
+                    feature_name,
+
+                "type":
+                    inferred_type,
+
+                "input_type":
+                    (
+                        "select"
+                        if inferred_type
+                        == "categorical"
+                        else "number"
+                    ),
+
+                "categories":
+                    categories,
+
+                "transformer":
+                    transformer_name,
+
+            }
+
+        return {}
+
+    # ============================================================
+    # Build Schema From Preprocessor
+    # ============================================================
+
+    def _build_schema_from_preprocessor(
+        self,
+    ) -> List[Dict[str, Any]]:
+        """
+        Legacy fallback that discovers the complete
+        feature schema from the fitted preprocessor.
         """
 
         if self.preprocessor is None:
@@ -201,12 +588,6 @@ class PredictionPipeline:
                 "Preprocessor must be loaded "
                 "before building feature schema."
             )
-
-        schema = []
-
-        # --------------------------------------------------------
-        # Locate ColumnTransformer transformers
-        # --------------------------------------------------------
 
         transformers = getattr(
             self.preprocessor,
@@ -221,9 +602,7 @@ class PredictionPipeline:
                 "fitted transformer information."
             )
 
-        # --------------------------------------------------------
-        # Inspect each transformer
-        # --------------------------------------------------------
+        schema = []
 
         for (
             transformer_name,
@@ -231,23 +610,22 @@ class PredictionPipeline:
             columns,
         ) in transformers:
 
-            # Ignore dropped columns
             if transformer == "drop":
 
                 continue
 
-            # Ignore empty column groups
             if columns is None:
 
                 continue
 
-            # Convert column selectors to list
             if isinstance(
                 columns,
                 str,
             ):
 
-                columns = [columns]
+                columns = [
+                    columns
+                ]
 
             else:
 
@@ -262,14 +640,16 @@ class PredictionPipeline:
                     continue
 
             # ----------------------------------------------------
-            # Numerical transformer
+            # Numerical
             # ----------------------------------------------------
 
             if transformer_name in {
+
                 "num",
                 "numerical",
                 "numeric",
                 "numerical_pipeline",
+
             }:
 
                 for column in columns:
@@ -285,28 +665,35 @@ class PredictionPipeline:
                         "input_type":
                             "number",
 
+                        "categories":
+                            [],
+
                         "transformer":
                             transformer_name,
 
                     })
 
             # ----------------------------------------------------
-            # Categorical transformer
+            # Categorical
             # ----------------------------------------------------
 
             elif transformer_name in {
+
                 "cat",
                 "categorical",
                 "categorical_pipeline",
+
             }:
 
-                categories = (
-                    self._get_categories(
-                        transformer
-                    )
-                )
-
                 for column in columns:
+
+                    categories = (
+                        self._get_categories_for_feature(
+                            transformer,
+                            columns,
+                            column,
+                        )
+                    )
 
                     schema.append({
 
@@ -328,7 +715,7 @@ class PredictionPipeline:
                     })
 
             # ----------------------------------------------------
-            # Unknown transformer
+            # Unknown
             # ----------------------------------------------------
 
             else:
@@ -339,20 +726,22 @@ class PredictionPipeline:
                     )
                 )
 
-                categories = []
-
-                if (
-                    inferred_type
-                    == "categorical"
-                ):
-
-                    categories = (
-                        self._get_categories(
-                            transformer
-                        )
-                    )
-
                 for column in columns:
+
+                    categories = []
+
+                    if (
+                        inferred_type
+                        == "categorical"
+                    ):
+
+                        categories = (
+                            self._get_categories_for_feature(
+                                transformer,
+                                columns,
+                                column,
+                            )
+                        )
 
                     schema.append({
 
@@ -379,7 +768,7 @@ class PredictionPipeline:
                     })
 
         # --------------------------------------------------------
-        # Remove duplicate features
+        # Remove duplicates
         # --------------------------------------------------------
 
         unique_schema = []
@@ -411,8 +800,8 @@ class PredictionPipeline:
         transformer: Any,
     ) -> str:
         """
-        Infer whether an unknown transformer is
-        numerical or categorical.
+        Infer whether a transformer is numerical
+        or categorical.
         """
 
         steps = getattr(
@@ -441,23 +830,28 @@ class PredictionPipeline:
         return "numerical"
 
     # ============================================================
-    # Get Categories
+    # Get Categories For Feature
     # ============================================================
 
     @staticmethod
-    def _get_categories(
+    def _get_categories_for_feature(
         transformer: Any,
+        columns: List[Any],
+        feature_name: str,
     ) -> List[Any]:
         """
-        Extract categorical values from a fitted
-        OneHotEncoder or similar transformer.
+        Extract categories belonging specifically
+        to one categorical feature.
+
+        This is important when multiple categorical
+        columns are handled by the same OneHotEncoder.
         """
 
-        categories = []
+        # --------------------------------------------------------
+        # Find encoder
+        # --------------------------------------------------------
 
-        # --------------------------------------------------------
-        # Direct categories_
-        # --------------------------------------------------------
+        encoder = None
 
         direct_categories = getattr(
             transformer,
@@ -467,61 +861,81 @@ class PredictionPipeline:
 
         if direct_categories is not None:
 
-            for category_group in (
-                direct_categories
-            ):
+            encoder = transformer
 
-                categories.extend(
-                    list(
-                        category_group
-                    )
-                )
+        else:
 
-            return [
-                value
-                for value in categories
-                if value is not None
-            ]
-
-        # --------------------------------------------------------
-        # Pipeline containing encoder
-        # --------------------------------------------------------
-
-        steps = getattr(
-            transformer,
-            "steps",
-            [],
-        )
-
-        for (
-            step_name,
-            step,
-        ) in steps:
-
-            step_categories = getattr(
-                step,
-                "categories_",
-                None,
+            steps = getattr(
+                transformer,
+                "steps",
+                [],
             )
 
-            if step_categories is not None:
+            for (
+                step_name,
+                step,
+            ) in steps:
 
-                for category_group in (
-                    step_categories
-                ):
+                step_categories = getattr(
+                    step,
+                    "categories_",
+                    None,
+                )
 
-                    categories.extend(
-                        list(
-                            category_group
-                        )
-                    )
+                if step_categories is not None:
 
-                break
+                    encoder = step
+
+                    break
+
+        if encoder is None:
+
+            return []
+
+        categories = getattr(
+            encoder,
+            "categories_",
+            None,
+        )
+
+        if categories is None:
+
+            return []
+
+        # --------------------------------------------------------
+        # Locate feature index
+        # --------------------------------------------------------
+
+        try:
+
+            feature_index = columns.index(
+                feature_name
+            )
+
+        except ValueError:
+
+            return []
+
+        if (
+            feature_index
+            >= len(categories)
+        ):
+
+            return []
 
         return [
+
             value
-            for value in categories
+
+            for value
+            in list(
+                categories[
+                    feature_index
+                ]
+            )
+
             if value is not None
+
         ]
 
     # ============================================================
@@ -533,9 +947,6 @@ class PredictionPipeline:
     ) -> List[Dict[str, Any]]:
         """
         Return the original input feature schema.
-
-        This method is intended to be consumed by
-        the generic ArchForge prediction UI.
         """
 
         if self.model is None:
@@ -552,14 +963,19 @@ class PredictionPipeline:
         self,
     ) -> List[str]:
         """
-        Return names of all input features.
+        Return names of all original input features.
         """
 
-        schema = self.get_input_schema()
+        schema = (
+            self.get_input_schema()
+        )
 
         return [
+
             feature["name"]
+
             for feature in schema
+
         ]
 
     # ============================================================
@@ -573,7 +989,9 @@ class PredictionPipeline:
         Return numerical input features.
         """
 
-        schema = self.get_input_schema()
+        schema = (
+            self.get_input_schema()
+        )
 
         return [
 
@@ -597,7 +1015,9 @@ class PredictionPipeline:
         Return categorical input features.
         """
 
-        schema = self.get_input_schema()
+        schema = (
+            self.get_input_schema()
+        )
 
         return [
 
@@ -611,7 +1031,7 @@ class PredictionPipeline:
         ]
 
     # ============================================================
-    # Get Categorical Values
+    # Get Feature Categories
     # ============================================================
 
     def get_feature_categories(
@@ -622,7 +1042,9 @@ class PredictionPipeline:
         Return possible values for a categorical feature.
         """
 
-        schema = self.get_input_schema()
+        schema = (
+            self.get_input_schema()
+        )
 
         for feature in schema:
 
@@ -664,25 +1086,29 @@ class PredictionPipeline:
                 "a dictionary."
             )
 
-        schema = self.get_input_schema()
+        schema = (
+            self.get_input_schema()
+        )
 
         expected_features = {
+
             feature["name"]
+
             for feature in schema
+
         }
 
         provided_features = set(
             input_data.keys()
         )
 
+        # --------------------------------------------------------
+        # Missing features
+        # --------------------------------------------------------
+
         missing_features = (
             expected_features
             - provided_features
-        )
-
-        extra_features = (
-            provided_features
-            - expected_features
         )
 
         if missing_features:
@@ -696,6 +1122,15 @@ class PredictionPipeline:
                 )
             )
 
+        # --------------------------------------------------------
+        # Unexpected features
+        # --------------------------------------------------------
+
+        extra_features = (
+            provided_features
+            - expected_features
+        )
+
         if extra_features:
 
             raise ValueError(
@@ -708,15 +1143,20 @@ class PredictionPipeline:
             )
 
         # --------------------------------------------------------
-        # Validate individual values
+        # Individual feature validation
         # --------------------------------------------------------
 
         for feature in schema:
 
             name = feature["name"]
+
             feature_type = feature["type"]
 
             value = input_data[name]
+
+            # ----------------------------------------------------
+            # None
+            # ----------------------------------------------------
 
             if value is None:
 
@@ -725,6 +1165,27 @@ class PredictionPipeline:
                     f"cannot be None."
                 )
 
+            # ----------------------------------------------------
+            # Empty string
+            # ----------------------------------------------------
+
+            if (
+                isinstance(
+                    value,
+                    str,
+                )
+                and not value.strip()
+            ):
+
+                raise ValueError(
+                    f"Feature '{name}' "
+                    f"cannot be empty."
+                )
+
+            # ----------------------------------------------------
+            # Numerical
+            # ----------------------------------------------------
+
             if (
                 feature_type
                 == "numerical"
@@ -732,7 +1193,9 @@ class PredictionPipeline:
 
                 try:
 
-                    float(value)
+                    numeric_value = float(
+                        value
+                    )
 
                 except (
                     TypeError,
@@ -744,14 +1207,29 @@ class PredictionPipeline:
                         f"must be numerical."
                     )
 
+                if pd.isna(
+                    numeric_value
+                ):
+
+                    raise ValueError(
+                        f"Feature '{name}' "
+                        f"cannot be NaN."
+                    )
+
+            # ----------------------------------------------------
+            # Categorical
+            # ----------------------------------------------------
+
             elif (
                 feature_type
                 == "categorical"
             ):
 
-                categories = feature.get(
-                    "categories",
-                    [],
+                categories = (
+                    feature.get(
+                        "categories",
+                        [],
+                    )
                 )
 
                 if (
@@ -760,11 +1238,70 @@ class PredictionPipeline:
                 ):
 
                     raise ValueError(
-                        f"Invalid value '{value}' "
-                        f"for feature '{name}'. "
+                        f"Invalid value "
+                        f"'{value}' for "
+                        f"feature '{name}'. "
                         f"Expected one of: "
                         f"{categories}"
                     )
+
+    # ============================================================
+    # Prepare Input
+    # ============================================================
+
+    def _prepare_input(
+        self,
+        input_data: Dict[str, Any],
+    ) -> pd.DataFrame:
+        """
+        Convert raw user input into the exact
+        DataFrame structure expected by the
+        fitted preprocessor.
+        """
+
+        feature_names = (
+            self.get_feature_names()
+        )
+
+        row = {}
+
+        for feature in feature_names:
+
+            value = input_data[
+                feature
+            ]
+
+            # ----------------------------------------------------
+            # Convert numerical values
+            # ----------------------------------------------------
+
+            feature_info = next(
+
+                item
+
+                for item
+                in self.feature_schema
+
+                if item["name"]
+                == feature
+
+            )
+
+            if (
+                feature_info["type"]
+                == "numerical"
+            ):
+
+                value = float(
+                    value
+                )
+
+            row[feature] = value
+
+        return pd.DataFrame(
+            [row],
+            columns=feature_names,
+        )
 
     # ============================================================
     # Prediction
@@ -776,16 +1313,6 @@ class PredictionPipeline:
     ) -> Any:
         """
         Generate a prediction from raw feature values.
-
-        Parameters
-        ----------
-        input_data:
-            Dictionary containing original feature values.
-
-        Returns
-        -------
-        Any
-            Prediction generated by the trained model.
         """
 
         if self.model is None:
@@ -801,21 +1328,13 @@ class PredictionPipeline:
         )
 
         # --------------------------------------------------------
-        # Create DataFrame
+        # Prepare DataFrame
         # --------------------------------------------------------
 
-        feature_names = (
-            self.get_feature_names()
-        )
-
-        input_df = pd.DataFrame(
-            [
-                {
-                    feature:
-                        input_data[feature]
-                    for feature in feature_names
-                }
-            ]
+        input_df = (
+            self._prepare_input(
+                input_data
+            )
         )
 
         # --------------------------------------------------------
@@ -838,6 +1357,10 @@ class PredictionPipeline:
             )
         )
 
+        # --------------------------------------------------------
+        # Return first prediction
+        # --------------------------------------------------------
+
         return prediction[0]
 
     # ============================================================
@@ -847,14 +1370,19 @@ class PredictionPipeline:
     def get_model_name(
         self,
     ) -> str:
+        """
+        Return the trained model name.
+        """
 
         if self.metadata:
 
             return self.metadata.get(
                 "model_name",
-                self.model.__class__.__name__
-                if self.model is not None
-                else "Unknown",
+                (
+                    self.model.__class__.__name__
+                    if self.model is not None
+                    else "Unknown"
+                ),
             )
 
         if self.model is not None:
@@ -872,6 +1400,9 @@ class PredictionPipeline:
     def get_problem_type(
         self,
     ) -> str:
+        """
+        Return the ML problem type.
+        """
 
         if self.metadata:
 
@@ -890,7 +1421,8 @@ class PredictionPipeline:
         self,
     ) -> str:
         """
-        Return target column when available.
+        Return the target column stored
+        in model metadata.
         """
 
         if self.metadata:
@@ -903,6 +1435,45 @@ class PredictionPipeline:
         return "Unknown"
 
     # ============================================================
+    # Primary Metric
+    # ============================================================
+
+    def get_primary_metric(
+        self,
+    ) -> str:
+        """
+        Return the metric used for model evaluation.
+        """
+
+        if self.metadata:
+
+            return self.metadata.get(
+                "primary_metric",
+                "Unknown",
+            )
+
+        return "Unknown"
+
+    # ============================================================
+    # Model Score
+    # ============================================================
+
+    def get_model_score(
+        self,
+    ) -> Any:
+        """
+        Return the best model evaluation score.
+        """
+
+        if self.metadata:
+
+            return self.metadata.get(
+                "best_model_score"
+            )
+
+        return None
+
+    # ============================================================
     # Prediction Information
     # ============================================================
 
@@ -910,12 +1481,17 @@ class PredictionPipeline:
         self,
     ) -> Dict[str, Any]:
         """
-        Return information required by the UI.
+        Return all information required by
+        the generic ArchForge prediction UI.
         """
 
         if self.model is None:
 
             self.load_artifacts()
+
+        schema = (
+            self.get_input_schema()
+        )
 
         return {
 
@@ -928,12 +1504,25 @@ class PredictionPipeline:
             "target_column":
                 self.get_target_column(),
 
+            "primary_metric":
+                self.get_primary_metric(),
+
+            "model_score":
+                self.get_model_score(),
+
             "features":
-                self.get_input_schema(),
+                schema,
+
+            "feature_names":
+                self.get_feature_names(),
+
+            "numerical_features":
+                self.get_numerical_features(),
+
+            "categorical_features":
+                self.get_categorical_features(),
 
             "feature_count":
-                len(
-                    self.get_input_schema()
-                ),
+                len(schema),
 
         }
