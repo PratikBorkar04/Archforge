@@ -13,7 +13,7 @@ Pipeline
 6. Model Selection
 7. Model Training
 8. Model Evaluation
-9. Model Saving
+9. Model Pushing & Saving
 """
 
 from pathlib import Path
@@ -30,6 +30,7 @@ from src.data_transformation import DataTransformation
 from src.model_selector import ModelSelector
 from src.model_trainer import ModelTrainer
 from src.model_evaluation import ModelEvaluation
+from src.model_pusher import ModelPusher
 
 
 class TrainingPipeline:
@@ -235,15 +236,75 @@ class TrainingPipeline:
         )
 
         # ========================================================
-        # 9. MODEL SAVING
+        # 9. MODEL PUSHING & SAVING
         # ========================================================
 
-        print("\n[9/9] Model Saving : READY")
+        print("\n[9/9] Model Pushing & Saving")
 
-        # Model saving will use:
+        model_pusher = ModelPusher(
+            project_root=self.project_root
+        )
+
+        # --------------------------------------------------------
+        # Determine original input feature columns
+        # --------------------------------------------------------
         #
-        # evaluation["best_model"]
-        # evaluation["best_model_name"]
+        # These are the columns that the user will eventually
+        # provide to the generic prediction UI.
+        #
+        # We use the cleaned training dataframe because identifier
+        # columns such as "Id" may already have been removed.
+        #
+
+        feature_columns = [
+            column
+            for column in cleaned_train_data.columns
+            if column != target_column
+        ]
+
+        # --------------------------------------------------------
+        # Push best model
+        # --------------------------------------------------------
+
+        model_pushing = (
+            model_pusher
+            .initiate_model_pushing(
+
+                best_model=evaluation[
+                    "best_model"
+                ],
+
+                best_model_name=evaluation[
+                    "best_model_name"
+                ],
+
+                best_model_score=evaluation[
+                    "best_model_score"
+                ],
+
+                primary_metric=evaluation[
+                    "primary_metric"
+                ],
+
+                problem_type=problem_type,
+
+                evaluation_source=evaluation[
+                    "evaluation_source"
+                ],
+
+                evaluation_samples=evaluation[
+                    "evaluation_samples"
+                ],
+
+                evaluation_report=evaluation[
+                    "evaluation_report"
+                ],
+
+                target_column=target_column,
+
+                feature_columns=feature_columns,
+            )
+        )
 
         # ========================================================
         # PIPELINE SUMMARY
@@ -261,10 +322,10 @@ class TrainingPipeline:
         print("Model Selection     : COMPLETED")
         print("Model Training      : COMPLETED")
         print("Model Evaluation    : COMPLETED")
-        print("Model Saving        : READY")
+        print("Model Pushing       : COMPLETED")
 
         print(
-            "\nTraining pipeline stages completed."
+            "\nTraining pipeline completed successfully."
         )
 
         # ========================================================
@@ -314,6 +375,9 @@ class TrainingPipeline:
 
             "model_evaluation":
                 evaluation,
+
+            "model_pushing":
+                model_pushing,
         }
 
     # ============================================================
@@ -329,11 +393,13 @@ class TrainingPipeline:
         """
 
         if train_data is None:
+
             raise ValueError(
                 "Training dataset is None."
             )
 
         if train_data.empty:
+
             raise ValueError(
                 "Training dataset is empty."
             )
@@ -343,6 +409,7 @@ class TrainingPipeline:
         )
 
         if len(columns) < 2:
+
             raise ValueError(
                 "Target detection requires "
                 "at least two columns."
@@ -358,6 +425,7 @@ class TrainingPipeline:
             metadata_target
             and metadata_target in columns
         ):
+
             return metadata_target
 
         candidates = (
@@ -367,6 +435,7 @@ class TrainingPipeline:
         )
 
         if not candidates:
+
             raise ValueError(
                 "Unable to generate target "
                 "column candidates."
@@ -394,12 +463,14 @@ class TrainingPipeline:
             best_score >= 70
             and score_gap >= 15
         ):
+
             return best_column
 
         if (
             best_score >= 60
             and score_gap >= 20
         ):
+
             return best_column
 
         print(
@@ -739,6 +810,7 @@ class TrainingPipeline:
         }
 
         if name in strong_names:
+
             return 30.0
 
         strong_patterns = (
@@ -760,6 +832,7 @@ class TrainingPipeline:
         for pattern in strong_patterns:
 
             if pattern in name:
+
                 return 22.0
 
         if name in {
@@ -802,6 +875,7 @@ class TrainingPipeline:
         }
 
         if name in identifier_names:
+
             return True
 
         identifier_patterns = (
@@ -822,19 +896,23 @@ class TrainingPipeline:
         for pattern in identifier_patterns:
 
             if pattern in name:
+
                 return True
 
         non_null = series.dropna()
 
         if non_null.empty:
+
             return False
 
         if len(non_null) <= 20:
+
             return False
 
         if not pd.api.types.is_integer_dtype(
             non_null
         ):
+
             return False
 
         unique_ratio = (
@@ -843,6 +921,7 @@ class TrainingPipeline:
         )
 
         if unique_ratio < 0.98:
+
             return False
 
         values = non_null.to_numpy()

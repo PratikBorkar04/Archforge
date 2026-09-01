@@ -573,10 +573,6 @@ class ModelSelector:
 
             "RandomForestRegressor",
 
-            "GradientBoostingRegressor",
-
-            "AdaBoostRegressor",
-
             "XGBRegressor",
 
             "CatBoostRegressor",
@@ -601,10 +597,6 @@ class ModelSelector:
             "DecisionTreeClassifier",
 
             "RandomForestClassifier",
-
-            "GradientBoostingClassifier",
-
-            "AdaBoostClassifier",
 
             "XGBClassifier",
 
@@ -767,8 +759,6 @@ class ModelSelector:
                 "XGBClassifier",
                 "CatBoostRegressor",
                 "CatBoostClassifier",
-                "AdaBoostRegressor",
-                "AdaBoostClassifier",
             }:
 
                 return (
