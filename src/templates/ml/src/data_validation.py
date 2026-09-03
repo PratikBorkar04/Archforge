@@ -9,13 +9,18 @@ Responsibilities
 2. Check column consistency.
 3. Detect missing values.
 4. Detect duplicate rows.
-5. Check target column.
-6. Check target missing values.
-7. Identify numerical and categorical columns.
-8. Save a validation report.
+5. Validate target column when explicitly known.
+6. Identify numerical and categorical columns.
+7. Save a validation report.
 
-The user does not need to run this file manually.
-app.py automatically triggers validation.
+Important
+---------
+Data Validation does NOT remove or impute missing values.
+
+Missing values are handled by DataCleaning.
+
+If the target column is not known yet, target validation is
+deferred to the Dataset Profiler.
 """
 
 from pathlib import Path
@@ -26,8 +31,7 @@ import pandas as pd
 
 class DataValidation:
     """
-    Automatically validate datasets before
-    they enter the ML pipeline.
+    Generic automatic dataset validation component.
     """
 
     def __init__(
@@ -63,6 +67,12 @@ class DataValidation:
         name: str,
     ) -> None:
 
+        if data is None:
+
+            raise ValueError(
+                f"{name} dataset cannot be None."
+            )
+
         if data.empty:
 
             raise ValueError(
@@ -80,6 +90,11 @@ class DataValidation:
     ) -> Dict[str, int]:
         """
         Detect missing values in every column.
+
+        IMPORTANT:
+        Missing values are warnings only.
+
+        DataCleaning is responsible for handling them.
         """
 
         missing = (
@@ -89,7 +104,7 @@ class DataValidation:
         )
 
         missing = {
-            column: count
+            column: int(count)
             for column, count
             in missing.items()
             if count > 0
@@ -106,9 +121,18 @@ class DataValidation:
                 missing.items()
             ):
 
+                percentage = (
+                    count
+                    / len(data)
+                    * 100
+                    if len(data) > 0
+                    else 0
+                )
+
                 print(
                     f"  • {column}: "
-                    f"{count}"
+                    f"{count} "
+                    f"({percentage:.2f}%)"
                 )
 
         else:
@@ -140,10 +164,19 @@ class DataValidation:
 
         if duplicates:
 
+            percentage = (
+                duplicates
+                / len(data)
+                * 100
+                if len(data) > 0
+                else 0
+            )
+
             print(
                 f"\nWarning: {duplicates} "
                 f"duplicate rows detected "
-                f"in {name}."
+                f"in {name} "
+                f"({percentage:.2f}%)."
             )
 
         else:
@@ -212,9 +245,23 @@ class DataValidation:
                 != validation_columns
             ):
 
+                missing_in_validation = (
+                    train_columns
+                    - validation_columns
+                )
+
+                extra_in_validation = (
+                    validation_columns
+                    - train_columns
+                )
+
                 raise ValueError(
                     "\nTraining and validation "
-                    "columns do not match."
+                    "columns do not match.\n\n"
+                    f"Missing in validation: "
+                    f"{missing_in_validation}\n"
+                    f"Extra in validation: "
+                    f"{extra_in_validation}"
                 )
 
         print(
@@ -228,34 +275,59 @@ class DataValidation:
     def _validate_target(
         self,
         train_data: pd.DataFrame,
-    ) -> str:
+    ) -> Optional[str]:
         """
-        Detect and validate target column.
+        Validate the target column only when it is known.
 
-        Current ArchForge MVP:
-        Last column is the target.
+        IMPORTANT
+        ---------
+        This method does NOT automatically select the last column.
+
+        If target_column is None, target validation is deferred
+        to DatasetProfiler.
+
+        Missing target values are NOT treated as a validation
+        failure because DataCleaning is responsible for removing
+        rows with missing target values.
         """
 
-        if self.target_column:
+        # --------------------------------------------------------
+        # Target not known yet
+        # --------------------------------------------------------
 
-            if (
-                self.target_column
-                not in train_data.columns
-            ):
+        if self.target_column is None:
 
-                raise ValueError(
-                    f"\nTarget column "
-                    f"'{self.target_column}' "
-                    "was not found."
-                )
+            print(
+                "\nTarget column not specified."
+            )
 
-            target = self.target_column
+            print(
+                "Target validation deferred "
+                "to Dataset Profiler."
+            )
 
-        else:
+            return None
 
-            target = train_data.columns[
-                -1
-            ]
+        # --------------------------------------------------------
+        # Check target exists
+        # --------------------------------------------------------
+
+        if (
+            self.target_column
+            not in train_data.columns
+        ):
+
+            raise ValueError(
+                f"\nTarget column "
+                f"'{self.target_column}' "
+                "was not found in training data."
+            )
+
+        target = self.target_column
+
+        # --------------------------------------------------------
+        # Missing target values
+        # --------------------------------------------------------
 
         missing_target = int(
             train_data[target]
@@ -265,19 +337,65 @@ class DataValidation:
 
         if missing_target:
 
-            raise ValueError(
-                f"\nTarget column "
-                f"'{target}' contains "
-                f"{missing_target} "
-                "missing values."
+            percentage = (
+                missing_target
+                / len(train_data)
+                * 100
+                if len(train_data) > 0
+                else 0
             )
 
-        if train_data[target].nunique() <= 1:
+            print(
+                f"\nWarning: Target column "
+                f"'{target}' contains "
+                f"{missing_target} missing values "
+                f"({percentage:.2f}%)."
+            )
+
+            print(
+                "These rows will be handled "
+                "by DataCleaning."
+            )
+
+        else:
+
+            print(
+                f"\nTarget column '{target}': "
+                "No missing values detected."
+            )
+
+        # --------------------------------------------------------
+        # Check whether target has any valid values
+        # --------------------------------------------------------
+
+        valid_target = (
+            train_data[target]
+            .dropna()
+        )
+
+        if valid_target.empty:
 
             raise ValueError(
                 f"\nTarget column "
                 f"'{target}' contains "
-                "only one unique value."
+                "no valid values."
+            )
+
+        # --------------------------------------------------------
+        # Unique value check
+        # --------------------------------------------------------
+
+        unique_values = (
+            valid_target.nunique()
+        )
+
+        if unique_values <= 1:
+
+            raise ValueError(
+                f"\nTarget column "
+                f"'{target}' contains "
+                "only one unique value "
+                "after excluding missing values."
             )
 
         print(
@@ -293,22 +411,30 @@ class DataValidation:
     @staticmethod
     def _analyze_features(
         train_data: pd.DataFrame,
-        target_column: str,
+        target_column: Optional[str],
     ) -> Dict[str, list]:
         """
         Identify numerical and categorical features.
+
+        If target is not known yet, all columns are analyzed
+        as dataset columns. Final feature analysis happens
+        after target selection.
         """
 
-        features = train_data.drop(
-            columns=[target_column]
-        )
+        if target_column is not None:
+
+            features = train_data.drop(
+                columns=[target_column]
+            )
+
+        else:
+
+            features = train_data.copy()
 
         numerical_columns = (
             features
             .select_dtypes(
-                include=[
-                    "number"
-                ]
+                include=["number"]
             )
             .columns
             .tolist()
@@ -317,9 +443,7 @@ class DataValidation:
         categorical_columns = (
             features
             .select_dtypes(
-                exclude=[
-                    "number"
-                ]
+                exclude=["number"]
             )
             .columns
             .tolist()
@@ -416,6 +540,12 @@ class DataValidation:
     ) -> Dict[str, Any]:
         """
         Run complete automatic validation.
+
+        Missing values are detected but NOT repaired.
+
+        Target selection is performed only when a target was
+        explicitly supplied. Otherwise target detection is
+        deferred to DatasetProfiler.
         """
 
         print(
@@ -467,17 +597,10 @@ class DataValidation:
         )
 
         # --------------------------------------------------------
-        # Target
-        # --------------------------------------------------------
-
-        target_column = (
-            self._validate_target(
-                train_data
-            )
-        )
-
-        # --------------------------------------------------------
         # Missing values
+        #
+        # IMPORTANT:
+        # Run this BEFORE target validation.
         # --------------------------------------------------------
 
         train_missing = (
@@ -504,6 +627,16 @@ class DataValidation:
                     "Validation",
                 )
             )
+
+        # --------------------------------------------------------
+        # Target
+        # --------------------------------------------------------
+
+        target_column = (
+            self._validate_target(
+                train_data
+            )
+        )
 
         # --------------------------------------------------------
         # Duplicate rows
@@ -550,12 +683,16 @@ class DataValidation:
         # --------------------------------------------------------
 
         statistics = {
-            "train": self._dataset_statistics(
-                train_data
-            ),
-            "test": self._dataset_statistics(
-                test_data
-            ),
+
+            "train":
+                self._dataset_statistics(
+                    train_data
+                ),
+
+            "test":
+                self._dataset_statistics(
+                    test_data
+                ),
         }
 
         if validation_data is not None:
@@ -576,6 +713,9 @@ class DataValidation:
 
             "target_column":
                 target_column,
+
+            "target_validation_deferred":
+                target_column is None,
 
             "features":
                 features,
