@@ -129,12 +129,9 @@ def get_project_info():
     console.print("\nSelect Project Type")
 
     console.print("1. Machine Learning")
-    console.print("2. Deep Learning")
-    console.print("3. Computer Vision")
-    console.print("4. Natural Language Processing")
-    console.print("5. Retrieval-Augmented Generation")
+    console.print("2. Natural Language Processing")
 
-    choice = input("\nEnter choice (1-5): ").strip()
+    choice = input("\nEnter choice (1-2): ").strip()
 
     shortcut = handle_shortcut(choice)
 
@@ -143,10 +140,7 @@ def get_project_info():
 
     project_types = {
         "1": "ml",
-        "2": "dl",
-        "3": "cv",
-        "4": "nlp",
-        "5": "rag",
+        "2": "nlp",
     }
 
     project_type = project_types.get(choice)
@@ -264,7 +258,9 @@ def main():
         # ----------------------------------------------------
 
         if generation_mode == "quit":
-            console.print("\n[dim]ArchForge closed successfully.[/dim]")
+            console.print(
+                "\n[dim]ArchForge closed successfully.[/dim]"
+            )
             break
 
         # ----------------------------------------------------
@@ -283,7 +279,9 @@ def main():
             project = get_project_info()
 
             if project == "quit":
-                console.print("\n[dim]ArchForge closed successfully.[/dim]")
+                console.print(
+                    "\n[dim]ArchForge closed successfully.[/dim]"
+                )
                 break
 
             if project in ("home", "back"):
@@ -314,7 +312,9 @@ def main():
             project = get_description_info()
 
             if project == "quit":
-                console.print("\n[dim]ArchForge closed successfully.[/dim]")
+                console.print(
+                    "\n[dim]ArchForge closed successfully.[/dim]"
+                )
                 break
 
             if project in ("home", "back"):
