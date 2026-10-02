@@ -1,38 +1,27 @@
 from pathlib import Path
 
 from src.data_ingestion import NLPDataIngestion
+from src.data_validation import NLPDataValidation
+from src.text_preprocessing import NLPTextPreprocessing
 
 
 def main():
 
     project_root = Path(__file__).resolve().parent
 
-    raw_data_dir = (
-        project_root
-        / "data"
-        / "raw"
-    )
-
-    artifacts_dir = (
-        project_root
-        / "artifacts"
-    )
+    raw_data_dir = project_root / "data" / "raw"
+    artifacts_dir = project_root / "artifacts"
 
     print("\n" + "=" * 60)
-    print("        ARCHFORGE - NLP DATA INGESTION TEST")
+    print("        ARCHFORGE - NLP PIPELINE TEST")
     print("=" * 60)
 
-    print(
-        f"\nRaw data : {raw_data_dir}"
-    )
+    print(f"\nRaw data : {raw_data_dir}")
+    print(f"Artifacts: {artifacts_dir}")
 
-    print(
-        f"Artifacts: {artifacts_dir}"
-    )
-
-    # --------------------------------------------------
-    # Check dataset
-    # --------------------------------------------------
+    # ==================================================
+    # CHECK RAW DATA
+    # ==================================================
 
     csv_files = list(
         raw_data_dir.glob("*.csv")
@@ -54,9 +43,9 @@ def main():
             f"  → {file.name}"
         )
 
-    # --------------------------------------------------
-    # Run ingestion
-    # --------------------------------------------------
+    # ==================================================
+    # DATA INGESTION
+    # ==================================================
 
     print(
         "\n" + "-" * 60
@@ -76,17 +65,15 @@ def main():
             project_root=project_root
         )
 
-        result = (
-            ingestion.initiate_data_ingestion()
-        )
+        (
+            train_data,
+            validation_data,
+            test_data,
+        ) = ingestion.initiate_data_ingestion()
 
         print(
             "\n✅ NLP data ingestion completed."
         )
-
-        print("\nResult:")
-
-        print(result)
 
     except Exception as exc:
 
@@ -100,20 +87,143 @@ def main():
 
         raise
 
-    # --------------------------------------------------
-    # Show generated artifacts
-    # --------------------------------------------------
+    # ==================================================
+    # DATA VALIDATION
+    # ==================================================
 
     print(
         "\n" + "-" * 60
     )
 
     print(
-        "Generated artifacts"
+        "Running NLP data validation..."
     )
 
     print(
         "-" * 60
+    )
+
+    try:
+
+        validation = NLPDataValidation(
+            project_root=project_root
+        )
+
+        (
+            validated_train,
+            validated_validation,
+            validated_test,
+            validation_reports,
+        ) = validation.initiate_data_validation()
+
+        print(
+            "\n✅ NLP data validation completed."
+        )
+
+    except Exception as exc:
+
+        print(
+            "\n❌ NLP data validation failed."
+        )
+
+        print(
+            f"\nError: {exc}"
+        )
+
+        raise
+
+    # ==================================================
+    # TEXT PREPROCESSING
+    # ==================================================
+
+    print(
+        "\n" + "-" * 60
+    )
+
+    print(
+        "Running NLP text preprocessing..."
+    )
+
+    print(
+        "-" * 60
+    )
+
+    try:
+
+        preprocessing = NLPTextPreprocessing(
+            project_root=project_root
+        )
+
+        (
+            processed_train,
+            processed_validation,
+            processed_test,
+        ) = (
+            preprocessing.initiate_text_preprocessing(
+                text_column="review"
+            )
+        )
+
+        print(
+            "\n✅ NLP text preprocessing completed."
+        )
+
+    except Exception as exc:
+
+        print(
+            "\n❌ NLP text preprocessing failed."
+        )
+
+        print(
+            f"\nError: {exc}"
+        )
+
+        raise
+
+    # ==================================================
+    # PIPELINE SUMMARY
+    # ==================================================
+
+    validation_count = (
+        len(processed_validation)
+        if processed_validation is not None
+        else "Not provided"
+    )
+
+    print(
+        "\n" + "=" * 60
+    )
+
+    print(
+        "        NLP PIPELINE TEST SUMMARY"
+    )
+
+    print(
+        "=" * 60
+    )
+
+    print(
+        f"\nTraining samples   : "
+        f"{len(processed_train)}"
+    )
+
+    print(
+        f"Validation samples : "
+        f"{validation_count}"
+    )
+
+    print(
+        f"Testing samples    : "
+        f"{len(processed_test)}"
+    )
+
+    print(
+        f"\nValidation reports : "
+        f"{len(validation_reports)}"
+    )
+
+    print(
+        "\nGenerated artifacts:"
     )
 
     if artifacts_dir.exists():
@@ -124,33 +234,20 @@ def main():
             if file.is_file()
         ]
 
-        if generated_files:
-
-            for file in generated_files:
-
-                print(
-                    f"  → "
-                    f"{file.relative_to(artifacts_dir)}"
-                )
-
-        else:
+        for file in generated_files:
 
             print(
-                "  No files generated."
+                f"  → "
+                f"{file.relative_to(artifacts_dir)}"
             )
-
-    else:
-
-        print(
-            "  Artifacts directory does not exist."
-        )
 
     print(
         "\n" + "=" * 60
     )
 
     print(
-        "DONE"
+        "✅ NLP ingestion + validation + "
+        "preprocessing completed."
     )
 
     print(
