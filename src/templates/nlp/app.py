@@ -9,18 +9,20 @@ def main():
 
     project_root = Path(__file__).resolve().parent
 
-    raw_data_dir = project_root / "data" / "raw"
-    artifacts_dir = project_root / "artifacts"
+    raw_data_dir = (
+        project_root / "data" / "raw"
+    )
+
+    artifacts_dir = (
+        project_root / "artifacts"
+    )
 
     print("\n" + "=" * 60)
     print("        ARCHFORGE - NLP PIPELINE TEST")
     print("=" * 60)
 
-    print(f"\nRaw data : {raw_data_dir}")
-    print(f"Artifacts: {artifacts_dir}")
-
     # ==================================================
-    # CHECK RAW DATA
+    # CHECK DATA
     # ==================================================
 
     csv_files = list(
@@ -35,153 +37,84 @@ def main():
 
         return
 
-    print("\nDataset found:")
-
-    for file in csv_files:
-
-        print(
-            f"  → {file.name}"
-        )
+    print(
+        f"\nDataset: {csv_files[0].name}"
+    )
 
     # ==================================================
     # DATA INGESTION
     # ==================================================
 
     print(
-        "\n" + "-" * 60
+        "\n[1/3] Data ingestion..."
     )
+
+    ingestion = NLPDataIngestion(
+        project_root=project_root
+    )
+
+    (
+        train_data,
+        validation_data,
+        test_data,
+    ) = ingestion.initiate_data_ingestion()
 
     print(
-        "Running NLP data ingestion..."
+        "✓ Ingestion completed."
     )
-
-    print(
-        "-" * 60
-    )
-
-    try:
-
-        ingestion = NLPDataIngestion(
-            project_root=project_root
-        )
-
-        (
-            train_data,
-            validation_data,
-            test_data,
-        ) = ingestion.initiate_data_ingestion()
-
-        print(
-            "\n✅ NLP data ingestion completed."
-        )
-
-    except Exception as exc:
-
-        print(
-            "\n❌ NLP data ingestion failed."
-        )
-
-        print(
-            f"\nError: {exc}"
-        )
-
-        raise
 
     # ==================================================
     # DATA VALIDATION
     # ==================================================
 
     print(
-        "\n" + "-" * 60
+        "\n[2/3] Data validation..."
     )
+
+    validation = NLPDataValidation(
+        project_root=project_root
+    )
+
+    (
+        validated_train,
+        validated_validation,
+        validated_test,
+        validation_reports,
+    ) = validation.initiate_data_validation()
 
     print(
-        "Running NLP data validation..."
+        "✓ Validation completed."
     )
-
-    print(
-        "-" * 60
-    )
-
-    try:
-
-        validation = NLPDataValidation(
-            project_root=project_root
-        )
-
-        (
-            validated_train,
-            validated_validation,
-            validated_test,
-            validation_reports,
-        ) = validation.initiate_data_validation()
-
-        print(
-            "\n✅ NLP data validation completed."
-        )
-
-    except Exception as exc:
-
-        print(
-            "\n❌ NLP data validation failed."
-        )
-
-        print(
-            f"\nError: {exc}"
-        )
-
-        raise
 
     # ==================================================
-    # TEXT PREPROCESSING
+    # NLP COLUMN ANALYSIS + PREPROCESSING
     # ==================================================
 
     print(
-        "\n" + "-" * 60
+        "\n[3/3] NLP column analysis + preprocessing..."
+    )
+
+    preprocessing = NLPTextPreprocessing(
+        project_root=project_root
+    )
+
+    (
+        processed_train,
+        processed_validation,
+        processed_test,
+        text_columns,
+        target_column,
+    ) = (
+        preprocessing
+        .initiate_text_preprocessing()
     )
 
     print(
-        "Running NLP text preprocessing..."
+        "\n✓ NLP preprocessing completed."
     )
-
-    print(
-        "-" * 60
-    )
-
-    try:
-
-        preprocessing = NLPTextPreprocessing(
-            project_root=project_root
-        )
-
-        (
-            processed_train,
-            processed_validation,
-            processed_test,
-        ) = (
-            preprocessing.initiate_text_preprocessing(
-                text_column="review"
-            )
-        )
-
-        print(
-            "\n✅ NLP text preprocessing completed."
-        )
-
-    except Exception as exc:
-
-        print(
-            "\n❌ NLP text preprocessing failed."
-        )
-
-        print(
-            f"\nError: {exc}"
-        )
-
-        raise
 
     # ==================================================
-    # PIPELINE SUMMARY
+    # FINAL SUMMARY
     # ==================================================
 
     validation_count = (
@@ -195,7 +128,7 @@ def main():
     )
 
     print(
-        "        NLP PIPELINE TEST SUMMARY"
+        "              PIPELINE SUMMARY"
     )
 
     print(
@@ -203,51 +136,31 @@ def main():
     )
 
     print(
-        f"\nTraining samples   : "
+        f"\nTarget       : {target_column}"
+    )
+
+    print(
+        f"Text columns : "
+        f"{', '.join(text_columns)}"
+    )
+
+    print(
+        f"\nTrain        : "
         f"{len(processed_train)}"
     )
 
     print(
-        f"Validation samples : "
+        f"Validation   : "
         f"{validation_count}"
     )
 
     print(
-        f"Testing samples    : "
+        f"Test         : "
         f"{len(processed_test)}"
     )
 
     print(
-        f"\nValidation reports : "
-        f"{len(validation_reports)}"
-    )
-
-    print(
-        "\nGenerated artifacts:"
-    )
-
-    if artifacts_dir.exists():
-
-        generated_files = [
-            file
-            for file in artifacts_dir.rglob("*")
-            if file.is_file()
-        ]
-
-        for file in generated_files:
-
-            print(
-                f"  → "
-                f"{file.relative_to(artifacts_dir)}"
-            )
-
-    print(
-        "\n" + "=" * 60
-    )
-
-    print(
-        "✅ NLP ingestion + validation + "
-        "preprocessing completed."
+        "\n✓ Current NLP pipeline completed."
     )
 
     print(

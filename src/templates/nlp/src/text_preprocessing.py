@@ -1,24 +1,21 @@
 """
 text_preprocessing.py
 
-Generic text preprocessing module for ArchForge NLP projects.
-
 Responsibilities
 ----------------
-1. Validate the selected text column.
-2. Handle missing text values.
-3. Convert text to string.
-4. Normalize whitespace.
-5. Convert text to lowercase.
-6. Optionally remove unwanted characters.
-7. Save the processed datasets.
+1. Load train/test/validation datasets.
+2. Detect the most likely target column.
+3. Ask the user to confirm or change the target.
+4. Detect possible text columns.
+5. Ask the user to confirm or change the text columns.
+6. Combine selected text columns.
+7. Clean the combined text.
+8. Save processed datasets.
 
 This module does NOT:
-- Detect the text column.
-- Detect the target column.
-- Perform tokenization.
+- Tokenize text.
 - Apply TF-IDF.
-- Train a model.
+- Train models.
 """
 
 from pathlib import Path
@@ -28,6 +25,12 @@ import pandas as pd
 
 
 class NLPTextPreprocessing:
+
+    TARGET_AUTO_THRESHOLD = 60
+    TARGET_SCORE_GAP = 15
+
+    TEXT_AUTO_THRESHOLD = 65
+    TEXT_SCORE_GAP = 15
 
     def __init__(
         self,
@@ -43,117 +46,572 @@ class NLPTextPreprocessing:
         )
 
         self.preprocessing_dir = (
-            self.artifacts_dir
-            / "preprocessed"
+            self.artifacts_dir / "preprocessed"
         )
 
-    # --------------------------------------------------
-    # Dataset loading
-    # --------------------------------------------------
+    # ==================================================
+    # DATA LOADING
+    # ==================================================
 
     def _load_dataset(
         self,
         filename: str,
     ) -> pd.DataFrame:
 
-        path = (
-            self.artifacts_dir / filename
-        )
+        path = self.artifacts_dir / filename
 
         if not path.exists():
-
             raise FileNotFoundError(
-                f"\nDataset not found:\n{path}"
+                f"Dataset not found: {path}"
             )
 
         try:
-
             data = pd.read_csv(path)
-
         except Exception as exc:
-
             raise RuntimeError(
-                f"\nUnable to read dataset:\n"
-                f"{path}\n\n"
+                f"Unable to read dataset: {path}\n"
                 f"Reason: {exc}"
             ) from exc
 
         if data.empty:
-
             raise ValueError(
-                f"\nDataset is empty:\n"
-                f"{path.name}"
+                f"Dataset is empty: {filename}"
             )
 
         return data
 
-    # --------------------------------------------------
-    # Text column validation
-    # --------------------------------------------------
+    # ==================================================
+    # TARGET COLUMN ANALYSIS
+    # ==================================================
 
     @staticmethod
-    def _validate_text_column(
-        data: pd.DataFrame,
-        text_column: str,
-    ) -> None:
+    def _is_identifier_like(
+        series: pd.Series,
+    ) -> bool:
 
-        if text_column not in data.columns:
+        non_null = series.dropna()
 
-            raise ValueError(
-                f"\nText column '{text_column}' "
-                f"was not found.\n\n"
-                f"Available columns:\n"
-                f"{list(data.columns)}"
-            )
+        if non_null.empty:
+            return False
 
-    # --------------------------------------------------
-    # Text cleaning
-    # --------------------------------------------------
-
-    @staticmethod
-    def _clean_text(
-        value,
-    ) -> str:
-
-        if pd.isna(value):
-
-            return ""
-
-        text = str(value)
-
-        # Convert to lowercase
-        text = text.lower()
-
-        # Normalize whitespace
-        text = " ".join(
-            text.split()
+        unique_ratio = (
+            non_null.nunique()
+            / len(non_null)
         )
 
-        return text
+        if unique_ratio >= 0.95:
+            return True
 
-    def _process_dataset(
+        return False
+
+    @staticmethod
+    def _is_constant(
+        series: pd.Series,
+    ) -> bool:
+
+        return series.dropna().nunique() <= 1
+
+    @classmethod
+    def _target_score(
+        cls,
+        data: pd.DataFrame,
+        column: str,
+    ) -> int:
+
+        series = data[column]
+
+        non_null = series.dropna()
+
+        if non_null.empty:
+            return -100
+
+        if cls._is_constant(series):
+            return -80
+
+        score = 0
+
+        unique_count = non_null.nunique()
+
+        unique_ratio = (
+            unique_count
+            / len(non_null)
+        )
+
+        # ----------------------------------------------
+        # Categorical / classification evidence
+        # ----------------------------------------------
+
+        if unique_count == 2:
+            score += 35
+
+        elif 3 <= unique_count <= 10:
+            score += 25
+
+        elif 11 <= unique_count <= 20:
+            score += 10
+
+        # ----------------------------------------------
+        # Low cardinality
+        # ----------------------------------------------
+
+        if unique_ratio <= 0.05:
+            score += 20
+
+        elif unique_ratio <= 0.20:
+            score += 10
+
+        # ----------------------------------------------
+        # Numeric target evidence
+        # ----------------------------------------------
+
+        if pd.api.types.is_numeric_dtype(series):
+
+            score += 15
+
+            if (
+                pd.api.types.is_integer_dtype(series)
+                and unique_count <= 20
+            ):
+                score += 10
+
+        # ----------------------------------------------
+        # Identifier penalty
+        # ----------------------------------------------
+
+        if cls._is_identifier_like(series):
+            score -= 70
+
+        # ----------------------------------------------
+        # Name signal
+        # Only a supporting signal.
+        # ----------------------------------------------
+
+        name = column.lower().strip()
+
+        strong_names = (
+            "target",
+            "label",
+            "class",
+            "sentiment",
+            "category",
+            "outcome",
+        )
+
+        if name in strong_names:
+            score += 20
+
+        return max(score, 0)
+
+    def _rank_target_columns(
         self,
         data: pd.DataFrame,
-        text_column: str,
+    ):
+
+        scores = {}
+
+        for column in data.columns:
+
+            scores[column] = (
+                self._target_score(
+                    data,
+                    column,
+                )
+            )
+
+        ranked = sorted(
+            scores.items(),
+            key=lambda item: item[1],
+            reverse=True,
+        )
+
+        return ranked
+
+    def _select_target_column(
+        self,
+        data: pd.DataFrame,
+    ) -> str:
+
+        ranked = self._rank_target_columns(data)
+
+        if not ranked:
+            raise ValueError(
+                "No columns available for target detection."
+            )
+
+        best_column, best_score = ranked[0]
+
+        second_score = (
+            ranked[1][1]
+            if len(ranked) > 1
+            else 0
+        )
+
+        confident = (
+            best_score >= self.TARGET_AUTO_THRESHOLD
+            and (
+                best_score - second_score
+                >= self.TARGET_SCORE_GAP
+            )
+        )
+
+        print("\nTarget column recommendation:")
+        print(
+            f"  {best_column} "
+            f"({best_score}% confidence)"
+        )
+
+        while True:
+
+            if confident:
+
+                choice = input(
+                    "\nUse this target column? [Y/n]: "
+                ).strip().lower()
+
+                if choice in ("", "y", "yes"):
+                    return best_column
+
+                if choice in ("n", "no"):
+                    break
+
+                print("Please enter Y or N.")
+
+            else:
+
+                print(
+                    "\nArchForge could not confidently "
+                    "select the target."
+                )
+
+                break
+
+        # --------------------------------------------------
+        # Manual target selection
+        # --------------------------------------------------
+
+        print("\nSelect target column:")
+
+        for index, (column, score) in enumerate(
+            ranked,
+            start=1,
+        ):
+            print(
+                f"  {index}. {column} "
+                f"({score}% confidence)"
+            )
+
+        while True:
+
+            choice = input(
+                "\nEnter column number: "
+            ).strip()
+
+            try:
+                index = int(choice)
+
+            except ValueError:
+                print("Enter a valid number.")
+                continue
+
+            if 1 <= index <= len(ranked):
+                return ranked[index - 1][0]
+
+            print("Invalid selection.")
+
+    # ==================================================
+    # TEXT COLUMN ANALYSIS
+    # ==================================================
+
+    @staticmethod
+    def _text_score(
+        data: pd.DataFrame,
+        column: str,
+    ) -> int:
+
+        series = data[column]
+
+        non_null = (
+            series
+            .dropna()
+            .astype(str)
+            .str.strip()
+        )
+
+        if non_null.empty:
+            return 0
+
+        # Text must be string/object-like.
+        if not (
+            pd.api.types.is_object_dtype(series)
+            or pd.api.types.is_string_dtype(series)
+        ):
+            return 0
+
+        score = 20
+
+        # ----------------------------------------------
+        # Average text length
+        # ----------------------------------------------
+
+        average_length = (
+            non_null.str.len().mean()
+        )
+
+        if average_length >= 100:
+            score += 30
+
+        elif average_length >= 50:
+            score += 25
+
+        elif average_length >= 20:
+            score += 15
+
+        elif average_length >= 10:
+            score += 5
+
+        # ----------------------------------------------
+        # Average word count
+        # ----------------------------------------------
+
+        average_words = (
+            non_null
+            .str.split()
+            .str.len()
+            .mean()
+        )
+
+        if average_words >= 20:
+            score += 30
+
+        elif average_words >= 10:
+            score += 25
+
+        elif average_words >= 5:
+            score += 15
+
+        elif average_words >= 3:
+            score += 5
+
+        # ----------------------------------------------
+        # Natural language characteristics
+        # ----------------------------------------------
+
+        space_ratio = (
+            non_null.str.contains(
+                r"\s",
+                regex=True,
+            ).mean()
+        )
+
+        if space_ratio >= 0.70:
+            score += 10
+
+        # ----------------------------------------------
+        # Penalize ID-like columns
+        # ----------------------------------------------
+
+        unique_ratio = (
+            non_null.nunique()
+            / len(non_null)
+        )
+
+        if unique_ratio >= 0.99 and average_length < 15:
+            score -= 40
+
+        return max(
+            min(score, 100),
+            0,
+        )
+
+    def _rank_text_columns(
+        self,
+        data: pd.DataFrame,
+        target_column: str,
+    ):
+
+        scores = {}
+
+        for column in data.columns:
+
+            if column == target_column:
+                continue
+
+            scores[column] = (
+                self._text_score(
+                    data,
+                    column,
+                )
+            )
+
+        ranked = sorted(
+            scores.items(),
+            key=lambda item: item[1],
+            reverse=True,
+        )
+
+        return ranked
+
+    def _select_text_columns(
+        self,
+        data: pd.DataFrame,
+        target_column: str,
+    ) -> list[str]:
+
+        ranked = self._rank_text_columns(
+            data,
+            target_column,
+        )
+
+        candidates = [
+            item
+            for item in ranked
+            if item[1] >= self.TEXT_AUTO_THRESHOLD
+        ]
+
+        if not candidates:
+
+            raise ValueError(
+                "\nNo sufficiently strong text "
+                "column detected."
+            )
+
+        # --------------------------------------------------
+        # Display recommendation
+        # --------------------------------------------------
+
+        print("\nText columns detected:")
+
+        for index, (column, score) in enumerate(
+            candidates,
+            start=1,
+        ):
+            print(
+                f"  {index}. {column} "
+                f"({score}% confidence)"
+            )
+
+        print(
+            "\nArchForge recommends combining "
+            f"{len(candidates)} text column(s)."
+        )
+
+        while True:
+
+            choice = input(
+                "Use these text columns? [Y/n]: "
+            ).strip().lower()
+
+            if choice in ("", "y", "yes"):
+                return [
+                    column
+                    for column, _ in candidates
+                ]
+
+            if choice in ("n", "no"):
+                break
+
+            print("Please enter Y or N.")
+
+        # --------------------------------------------------
+        # Manual selection
+        # --------------------------------------------------
+
+        print("\nAll possible text columns:")
+
+        for index, (column, score) in enumerate(
+            ranked,
+            start=1,
+        ):
+            print(
+                f"  {index}. {column} "
+                f"({score}% confidence)"
+            )
+
+        print(
+            "\nEnter column numbers separated "
+            "by commas."
+        )
+
+        while True:
+
+            choice = input(
+                "Example: 1,2: "
+            ).strip()
+
+            try:
+
+                numbers = [
+                    int(value.strip())
+                    for value in choice.split(",")
+                ]
+
+            except ValueError:
+
+                print(
+                    "Enter numbers separated by commas."
+                )
+
+                continue
+
+            if not numbers:
+                continue
+
+            if len(set(numbers)) != len(numbers):
+                print(
+                    "Do not select the same column twice."
+                )
+                continue
+
+            if any(
+                number < 1
+                or number > len(ranked)
+                for number in numbers
+            ):
+                print("Invalid column number.")
+                continue
+
+            selected = [
+                ranked[number - 1][0]
+                for number in numbers
+            ]
+
+            return selected
+
+    # ==================================================
+    # COMBINE TEXT COLUMNS
+    # ==================================================
+
+    @staticmethod
+    def _combine_text_columns(
+        data: pd.DataFrame,
+        text_columns: list[str],
     ) -> pd.DataFrame:
 
-        self._validate_text_column(
-            data,
-            text_column,
+        processed = data.copy()
+
+        processed["combined_text"] = (
+            processed[text_columns]
+            .fillna("")
+            .astype(str)
+            .agg(" ".join, axis=1)
+            .str.replace(
+                r"\s+",
+                " ",
+                regex=True,
+            )
+            .str.strip()
+            .str.lower()
         )
 
-        processed_data = data.copy()
-
-        processed_data[text_column] = (
-            processed_data[text_column]
-            .apply(self._clean_text)
+        processed = processed.drop(
+            columns=text_columns
         )
 
-        return processed_data
+        return processed
 
-    # --------------------------------------------------
-    # Save processed dataset
-    # --------------------------------------------------
+    # ==================================================
+    # SAVE DATASET
+    # ==================================================
 
     def _save_dataset(
         self,
@@ -176,40 +634,23 @@ class NLPTextPreprocessing:
             index=False,
         )
 
-        print(
-            f"Saved: {path}"
-        )
-
         return path
 
-    # --------------------------------------------------
-    # Main preprocessing
-    # --------------------------------------------------
+    # ==================================================
+    # MAIN
+    # ==================================================
 
-    def initiate_text_preprocessing(
-        self,
-        text_column: str,
-    ):
+    def initiate_text_preprocessing(self):
 
         print(
             "\n" + "=" * 60
         )
-
         print(
-            "NLP TEXT PREPROCESSING"
+            "ARCHFORGE - NLP COLUMN ANALYSIS"
         )
-
         print(
             "=" * 60
         )
-
-        print(
-            f"\nText column: {text_column}"
-        )
-
-        # --------------------------------------------------
-        # Load datasets
-        # --------------------------------------------------
 
         train_data = self._load_dataset(
             "train.csv"
@@ -236,33 +677,64 @@ class NLPTextPreprocessing:
                 )
             )
 
-        print(
-            "\nDatasets loaded successfully."
-        )
+        # ==================================================
+        # TARGET SELECTION
+        # ==================================================
 
-        # --------------------------------------------------
-        # Process datasets
-        # --------------------------------------------------
-
-        print(
-            "\nProcessing training data..."
-        )
-
-        processed_train = (
-            self._process_dataset(
-                train_data,
-                text_column,
+        target_column = (
+            self._select_target_column(
+                train_data
             )
         )
 
         print(
-            "Processing testing data..."
+            f"\nSelected target: {target_column}"
+        )
+
+        # ==================================================
+        # TEXT COLUMN SELECTION
+        # ==================================================
+
+        text_columns = (
+            self._select_text_columns(
+                train_data,
+                target_column,
+            )
+        )
+
+        print(
+            "\nSelected text columns:"
+        )
+
+        for column in text_columns:
+            print(f"  • {column}")
+
+        # ==================================================
+        # SAFETY CHECK
+        # ==================================================
+
+        if target_column in text_columns:
+
+            raise RuntimeError(
+                "Safety check failed: target column "
+                "was selected as a text column."
+            )
+
+        # ==================================================
+        # PROCESS DATASETS
+        # ==================================================
+
+        processed_train = (
+            self._combine_text_columns(
+                train_data,
+                text_columns,
+            )
         )
 
         processed_test = (
-            self._process_dataset(
+            self._combine_text_columns(
                 test_data,
-                text_column,
+                text_columns,
             )
         )
 
@@ -270,20 +742,16 @@ class NLPTextPreprocessing:
 
         if validation_data is not None:
 
-            print(
-                "Processing validation data..."
-            )
-
             processed_validation = (
-                self._process_dataset(
+                self._combine_text_columns(
                     validation_data,
-                    text_column,
+                    text_columns,
                 )
             )
 
-        # --------------------------------------------------
-        # Save datasets
-        # --------------------------------------------------
+        # ==================================================
+        # SAVE
+        # ==================================================
 
         train_path = self._save_dataset(
             processed_train,
@@ -306,71 +774,47 @@ class NLPTextPreprocessing:
                 )
             )
 
-        # --------------------------------------------------
-        # Summary
-        # --------------------------------------------------
+        # ==================================================
+        # SUMMARY
+        # ==================================================
 
         print(
-            "\n" + "=" * 60
+            "\n" + "-" * 60
         )
 
         print(
-            "NLP TEXT PREPROCESSING SUMMARY"
+            "NLP preprocessing completed."
         )
 
         print(
-            "=" * 60
+            f"Target       : {target_column}"
         )
 
         print(
-            f"\nTraining samples   : "
-            f"{len(processed_train)}"
+            f"Text columns : {len(text_columns)}"
         )
 
         print(
-            f"Testing samples    : "
-            f"{len(processed_test)}"
-        )
-
-        validation_count = (
-            len(processed_validation)
-            if processed_validation is not None
-            else "Not provided"
+            f"Train        : {train_path}"
         )
 
         print(
-            f"Validation samples : {validation_count}"
-        )
-
-        print(
-            f"\nProcessed datasets:"
-        )
-
-        print(
-            f"  → {train_path}"
+            f"Test         : {test_path}"
         )
 
         if validation_path_saved:
-
             print(
-                f"  → {validation_path_saved}"
+                f"Validation   : {validation_path_saved}"
             )
 
         print(
-            f"  → {test_path}"
-        )
-
-        print(
-            "\nNLP text preprocessing "
-            "completed successfully."
-        )
-
-        print(
-            "=" * 60
+            "-" * 60
         )
 
         return (
             processed_train,
             processed_validation,
             processed_test,
+            text_columns,
+            target_column,
         )
