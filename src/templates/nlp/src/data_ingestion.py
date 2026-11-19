@@ -1,3 +1,4 @@
+
 """
 data_ingestion.py
 
@@ -39,20 +40,12 @@ class NLPDataIngestion:
 
     MAX_CSV_FILES = 10
 
-    TRAIN_KEYWORDS = (
-        "train",
-        "training",
-    )
-
-    VALIDATION_KEYWORDS = (
-        "validation",
-        "valid",
-        "val",
-    )
-
-    TEST_KEYWORDS = (
-        "test",
-        "testing",
+    # CSV encodings to try, in order.
+    CSV_ENCODINGS = (
+        "utf-8",
+        "utf-8-sig",
+        "cp1252",
+        "latin1",
     )
 
     def __init__(
@@ -62,19 +55,14 @@ class NLPDataIngestion:
         random_state: int = 42,
     ) -> None:
 
-        self.project_root = Path(
-            project_root
-        ).resolve()
+        self.project_root = Path(project_root).resolve()
 
         self.raw_data_dir = (
-            self.project_root
-            / "data"
-            / "raw"
+            self.project_root / "data" / "raw"
         )
 
         self.artifacts_dir = (
-            self.project_root
-            / "artifacts"
+            self.project_root / "artifacts"
         )
 
         self.test_size = test_size
@@ -88,12 +76,10 @@ class NLPDataIngestion:
         """
         Discover CSV files from data/raw/.
 
-        Maximum allowed:
-            10 CSV files.
+        Maximum allowed: 10 CSV files.
         """
 
         if not self.raw_data_dir.exists():
-
             raise FileNotFoundError(
                 f"\nRaw data directory does not exist:\n"
                 f"{self.raw_data_dir}"
@@ -104,18 +90,14 @@ class NLPDataIngestion:
         )
 
         if not csv_files:
-
             raise FileNotFoundError(
                 f"\nNo CSV files found in:\n"
                 f"{self.raw_data_dir}"
             )
 
-        print(
-            f"\nFound {len(csv_files)} CSV file(s)."
-        )
+        print(f"\nFound {len(csv_files)} CSV file(s).")
 
         if len(csv_files) > self.MAX_CSV_FILES:
-
             raise ValueError(
                 "\nToo many CSV files detected.\n"
                 f"Maximum allowed: {self.MAX_CSV_FILES}\n"
@@ -125,10 +107,7 @@ class NLPDataIngestion:
             )
 
         for file in csv_files:
-
-            print(
-                f"  • {file.name}"
-            )
+            print(f"  • {file.name}")
 
         return csv_files
 
@@ -137,78 +116,49 @@ class NLPDataIngestion:
     # ============================================================
 
     @staticmethod
-    def _file_hash(
-        file: Path,
-    ) -> str:
+    def _file_hash(file: Path) -> str:
         """
         Generate SHA-256 hash for a file.
 
-        This detects files containing exactly
-        the same content even when their names differ.
+        Detects files containing exactly the same content,
+        even when their names differ.
         """
 
         sha256 = hashlib.sha256()
 
-        with file.open(
-            "rb"
-        ) as handle:
-
+        with file.open("rb") as handle:
             for chunk in iter(
                 lambda: handle.read(1024 * 1024),
                 b"",
             ):
-
                 sha256.update(chunk)
 
         return sha256.hexdigest()
 
-    def _check_duplicate_files(
-        self,
-        files,
-    ) -> None:
+    def _check_duplicate_files(self, files) -> None:
         """
         Detect duplicate CSV files using file content.
         """
 
         hashes = {}
-
         duplicates = []
 
         for file in files:
-
-            file_hash = self._file_hash(
-                file
-            )
+            file_hash = self._file_hash(file)
 
             if file_hash in hashes:
-
                 duplicates.append(
-                    (
-                        hashes[file_hash],
-                        file,
-                    )
+                    (hashes[file_hash], file)
                 )
-
             else:
-
                 hashes[file_hash] = file
 
         if duplicates:
-
-            print(
-                "\n" + "=" * 60
-            )
-
-            print(
-                "DUPLICATE DATASETS DETECTED"
-            )
-
-            print(
-                "=" * 60
-            )
+            print("\n" + "=" * 60)
+            print("DUPLICATE DATASETS DETECTED")
+            print("=" * 60)
 
             for original, duplicate in duplicates:
-
                 print(
                     f"\nDuplicate files:"
                     f"\n  • {original.name}"
@@ -221,38 +171,87 @@ class NLPDataIngestion:
                 "starting NLP ingestion."
             )
 
-        print(
-            "\nNo duplicate CSV files detected."
-        )
+        print("\nNo duplicate CSV files detected.")
 
     # ============================================================
-    # Read Dataset
+    # Read Dataset - Encoding Error Handling
     # ============================================================
 
     @staticmethod
-    def _read_dataset(
-        file: Path,
-    ) -> pd.DataFrame:
+    def _read_dataset(file: Path) -> pd.DataFrame:
         """
-        Read a CSV dataset safely.
+        Read a CSV dataset using multiple possible encodings.
+
+        Encoding order:
+            1. UTF-8
+            2. UTF-8-SIG
+            3. CP1252
+            4. Latin-1
+
+        UnicodeDecodeError:
+            Try the next encoding.
+
+        ParserError:
+            Stop immediately because changing the encoding
+            will not normally fix malformed CSV structure.
         """
 
-        try:
+        data = None
+        successful_encoding = None
+        encoding_errors = []
 
-            data = pd.read_csv(
-                file
+        for encoding in NLPDataIngestion.CSV_ENCODINGS:
+
+            try:
+                data = pd.read_csv(
+                    file,
+                    encoding=encoding,
+                )
+
+                successful_encoding = encoding
+                break
+
+            except UnicodeDecodeError as exc:
+                encoding_errors.append(
+                    f"{encoding}: {exc}"
+                )
+                continue
+
+            except pd.errors.ParserError as exc:
+                raise RuntimeError(
+                    f"\nCSV structure is invalid:\n"
+                    f"{file}\n\n"
+                    f"Reason: {exc}\n\n"
+                    "Please check the CSV file for malformed "
+                    "rows, inconsistent delimiters, or "
+                    "incorrect quotation marks."
+                ) from exc
+
+            except pd.errors.EmptyDataError as exc:
+                raise ValueError(
+                    f"\nCSV file contains no readable data:\n"
+                    f"{file.name}"
+                ) from exc
+
+            except Exception as exc:
+                raise RuntimeError(
+                    f"\nUnable to read dataset:\n"
+                    f"{file}\n\n"
+                    f"Reason: {exc}"
+                ) from exc
+
+        if data is None:
+            raise RuntimeError(
+                f"\nUnable to decode dataset:\n"
+                f"{file}\n\n"
+                "Tried the following encodings:\n"
+                + "\n".join(
+                    f"  • {error}"
+                    for error in encoding_errors
+                )
             )
 
-        except Exception as exc:
-
-            raise RuntimeError(
-                f"\nUnable to read dataset:\n"
-                f"{file}\n\n"
-                f"Reason: {exc}"
-            ) from exc
-
         if data.empty:
-
             raise ValueError(
                 f"\nDataset is empty:\n"
                 f"{file.name}"
@@ -260,6 +259,7 @@ class NLPDataIngestion:
 
         print(
             f"\nLoaded: {file.name}"
+            f" | Encoding: {successful_encoding}"
             f" | Rows: {len(data)}"
             f" | Columns: {len(data.columns)}"
         )
@@ -277,7 +277,6 @@ class NLPDataIngestion:
     ) -> Optional[str]:
         """
         Detect whether a filename represents:
-
             train
             validation
             test
@@ -290,17 +289,10 @@ class NLPDataIngestion:
             review_validation.csv
             review_val.csv
             review_test.csv
-
-        Returns:
-            'train'
-            'validation'
-            'test'
-            None
         """
 
         name = file.stem.lower()
 
-        # Convert common separators into spaces.
         normalized = (
             name
             .replace("-", " ")
@@ -308,26 +300,15 @@ class NLPDataIngestion:
             .replace(".", " ")
         )
 
-        tokens = set(
-            normalized.split()
-        )
+        tokens = set(normalized.split())
 
-        if tokens.intersection(
-            cls.TRAIN_KEYWORDS
-        ):
-
+        if tokens.intersection(("train", "training")):
             return "train"
 
-        if tokens.intersection(
-            cls.VALIDATION_KEYWORDS
-        ):
-
+        if tokens.intersection(("validation", "valid", "val")):
             return "validation"
 
-        if tokens.intersection(
-            cls.TEST_KEYWORDS
-        ):
-
+        if tokens.intersection(("test", "testing")):
             return "test"
 
         return None
@@ -337,13 +318,9 @@ class NLPDataIngestion:
     # ============================================================
 
     @classmethod
-    def _classify_files(
-        cls,
-        files,
-    ):
+    def _classify_files(cls, files):
         """
-        Separate explicit split files from
-        normal datasets.
+        Separate explicit split files from normal datasets.
         """
 
         train_files = []
@@ -352,25 +329,18 @@ class NLPDataIngestion:
         normal_files = []
 
         for file in files:
-
-            role = cls._detect_file_role(
-                file
-            )
+            role = cls._detect_file_role(file)
 
             if role == "train":
-
                 train_files.append(file)
 
             elif role == "validation":
-
                 validation_files.append(file)
 
             elif role == "test":
-
                 test_files.append(file)
 
             else:
-
                 normal_files.append(file)
 
         return (
@@ -395,52 +365,37 @@ class NLPDataIngestion:
         Validate explicitly supplied train/test/validation files.
         """
 
-        # --------------------------------------------------------
-        # Multiple files for the same explicit role
-        # --------------------------------------------------------
-
         if len(train_files) > 1:
-
             raise ValueError(
                 "\nMultiple training files detected:\n"
                 + "\n".join(
                     f"  • {file.name}"
                     for file in train_files
                 )
-                + "\n\n"
-                "Please provide only one training file."
+                + "\n\nPlease provide only one training file."
             )
 
         if len(validation_files) > 1:
-
             raise ValueError(
                 "\nMultiple validation files detected:\n"
                 + "\n".join(
                     f"  • {file.name}"
                     for file in validation_files
                 )
-                + "\n\n"
-                "Please provide only one validation file."
+                + "\n\nPlease provide only one validation file."
             )
 
         if len(test_files) > 1:
-
             raise ValueError(
                 "\nMultiple testing files detected:\n"
                 + "\n".join(
                     f"  • {file.name}"
                     for file in test_files
                 )
-                + "\n\n"
-                "Please provide only one testing file."
+                + "\n\nPlease provide only one testing file."
             )
 
-        # --------------------------------------------------------
-        # Explicit split must contain train + test
-        # --------------------------------------------------------
-
         if train_files and not test_files:
-
             raise ValueError(
                 "\nAn explicit training dataset was detected, "
                 "but no testing dataset was found.\n\n"
@@ -450,36 +405,24 @@ class NLPDataIngestion:
             )
 
         if test_files and not train_files:
-
             raise ValueError(
                 "\nAn explicit testing dataset was detected, "
                 "but no training dataset was found."
             )
 
-        # --------------------------------------------------------
-        # Validation alone is not meaningful
-        # --------------------------------------------------------
-
         if validation_files and not (
             train_files and test_files
         ):
-
             raise ValueError(
                 "\nA validation dataset was detected, "
                 "but train/test datasets are incomplete."
             )
-
-        # --------------------------------------------------------
-        # Do not silently mix explicit splits with
-        # unrelated normal datasets.
-        # --------------------------------------------------------
 
         if (
             train_files
             or validation_files
             or test_files
         ) and normal_files:
-
             raise ValueError(
                 "\nMixed dataset configuration detected.\n\n"
                 "Explicit train/test/validation files were found "
@@ -488,8 +431,7 @@ class NLPDataIngestion:
                     f"  • {file.name}"
                     for file in normal_files
                 )
-                + "\n\n"
-                "Please keep either:\n"
+                + "\n\nPlease keep either:\n"
                 "  1. Explicit train/validation/test files\n"
                 "or\n"
                 "  2. Normal dataset files\n\n"
@@ -500,51 +442,33 @@ class NLPDataIngestion:
     # Combine Same-Schema Files
     # ============================================================
 
-    def _combine_same_schema_files(
-        self,
-        files,
-    ) -> pd.DataFrame:
+    def _combine_same_schema_files(self, files) -> pd.DataFrame:
         """
-        Combine multiple normal CSV files
-        having exactly the same columns.
+        Combine multiple normal CSV files having
+        exactly the same columns.
         """
 
         datasets = []
-
         reference_columns = None
 
-        print(
-            "\nCombining compatible datasets..."
-        )
+        print("\nCombining compatible datasets...")
 
         for file in files:
-
-            data = self._read_dataset(
-                file
-            )
-
-            columns = list(
-                data.columns
-            )
+            data = self._read_dataset(file)
+            columns = list(data.columns)
 
             if reference_columns is None:
-
                 reference_columns = columns
 
             elif columns != reference_columns:
-
                 raise ValueError(
                     "\nSchema mismatch while combining datasets.\n\n"
-                    f"Expected columns:\n"
-                    f"{reference_columns}\n\n"
+                    f"Expected columns:\n{reference_columns}\n\n"
                     f"File: {file.name}\n"
-                    f"Columns:\n"
-                    f"{columns}"
+                    f"Columns:\n{columns}"
                 )
 
-            datasets.append(
-                data
-            )
+            datasets.append(data)
 
         combined = pd.concat(
             datasets,
@@ -563,10 +487,7 @@ class NLPDataIngestion:
     # Find Dataset Groups
     # ============================================================
 
-    def _group_normal_datasets(
-        self,
-        files,
-    ):
+    def _group_normal_datasets(self, files):
         """
         Group normal datasets by exact column schema.
         """
@@ -574,26 +495,17 @@ class NLPDataIngestion:
         groups = []
 
         for file in files:
-
-            data = self._read_dataset(
-                file
-            )
-
-            columns = tuple(
-                data.columns
-            )
+            data = self._read_dataset(file)
+            columns = tuple(data.columns)
 
             matched_group = None
 
             for group in groups:
-
                 if group["columns"] == columns:
-
                     matched_group = group
                     break
 
             if matched_group is None:
-
                 groups.append(
                     {
                         "columns": columns,
@@ -602,10 +514,7 @@ class NLPDataIngestion:
                 )
 
             else:
-
-                matched_group[
-                    "files"
-                ].append(file)
+                matched_group["files"].append(file)
 
         return [
             group["files"]
@@ -617,84 +526,48 @@ class NLPDataIngestion:
     # ============================================================
 
     @staticmethod
-    def _ask_dataset_choice(
-        dataset_groups,
-    ):
+    def _ask_dataset_choice(dataset_groups):
         """
         Ask the user which independent dataset group
         should be used.
         """
 
-        print(
-            "\n" + "=" * 60
-        )
-
-        print(
-            "MULTIPLE DATASET GROUPS DETECTED"
-        )
-
-        print(
-            "=" * 60
-        )
+        print("\n" + "=" * 60)
+        print("MULTIPLE DATASET GROUPS DETECTED")
+        print("=" * 60)
 
         for index, group in enumerate(
             dataset_groups,
             start=1,
         ):
-
-            print(
-                f"\n{index}. Dataset group"
-            )
+            print(f"\n{index}. Dataset group")
 
             for file in group:
+                print(f"   • {file.name}")
 
-                print(
-                    f"   • {file.name}"
-                )
-
-        print(
-            "\n0. Cancel"
-        )
+        print("\n0. Cancel")
 
         while True:
-
             choice = input(
                 "\nSelect dataset group: "
             ).strip()
 
             if choice == "0":
-
                 raise RuntimeError(
                     "NLP data ingestion cancelled by user."
                 )
 
             try:
-
-                selected = int(
-                    choice
-                )
+                selected = int(choice)
 
             except ValueError:
-
-                print(
-                    "Please enter a valid number."
-                )
-
+                print("Please enter a valid number.")
                 continue
 
-            if (
-                1
-                <= selected
-                <= len(dataset_groups)
-            ):
+            if 1 <= selected <= len(dataset_groups):
+                return dataset_groups[selected - 1]
 
-                return dataset_groups[
-                    selected - 1
-                ]
-
-            print(
-                "Invalid selection."
-            )
+            print("Invalid selection.")
 
     # ============================================================
     # Check Column Consistency
@@ -704,25 +577,17 @@ class NLPDataIngestion:
     def _check_column_consistency(
         train_data: pd.DataFrame,
         test_data: pd.DataFrame,
-        validation_data: Optional[
-            pd.DataFrame
-        ] = None,
+        validation_data: Optional[pd.DataFrame] = None,
     ) -> None:
         """
-        Ensure train/test/validation datasets
-        contain the same columns in the same order.
+        Ensure train/test/validation datasets contain
+        the same columns in the same order.
         """
 
-        train_columns = list(
-            train_data.columns
-        )
-
-        test_columns = list(
-            test_data.columns
-        )
+        train_columns = list(train_data.columns)
+        test_columns = list(test_data.columns)
 
         if train_columns != test_columns:
-
             raise ValueError(
                 "\nTraining and testing datasets "
                 "have different columns.\n\n"
@@ -731,16 +596,11 @@ class NLPDataIngestion:
             )
 
         if validation_data is not None:
-
             validation_columns = list(
                 validation_data.columns
             )
 
-            if (
-                train_columns
-                != validation_columns
-            ):
-
+            if train_columns != validation_columns:
                 raise ValueError(
                     "\nTraining and validation datasets "
                     "have different columns.\n\n"
@@ -748,9 +608,7 @@ class NLPDataIngestion:
                     f"Validation:\n{validation_columns}"
                 )
 
-        print(
-            "\nSchema consistency check passed."
-        )
+        print("\nSchema consistency check passed.")
 
     # ============================================================
     # Save Dataset
@@ -770,19 +628,14 @@ class NLPDataIngestion:
             exist_ok=True,
         )
 
-        path = (
-            self.artifacts_dir
-            / filename
-        )
+        path = self.artifacts_dir / filename
 
         data.to_csv(
             path,
             index=False,
         )
 
-        print(
-            f"Saved: {path}"
-        )
+        print(f"Saved: {path}")
 
         return path
 
@@ -808,17 +661,9 @@ class NLPDataIngestion:
             test_data
         """
 
-        print(
-            "\n" + "=" * 60
-        )
-
-        print(
-            "NLP DATA INGESTION"
-        )
-
-        print(
-            "=" * 60
-        )
+        print("\n" + "=" * 60)
+        print("NLP DATA INGESTION")
+        print("=" * 60)
 
         # --------------------------------------------------------
         # 1. Discover files
@@ -830,9 +675,7 @@ class NLPDataIngestion:
         # 2. Duplicate detection
         # --------------------------------------------------------
 
-        self._check_duplicate_files(
-            files
-        )
+        self._check_duplicate_files(files)
 
         # --------------------------------------------------------
         # 3. Classify files
@@ -843,17 +686,13 @@ class NLPDataIngestion:
             validation_files,
             test_files,
             normal_files,
-        ) = self._classify_files(
-            files
-        )
+        ) = self._classify_files(files)
 
         # --------------------------------------------------------
         # Print detected roles
         # --------------------------------------------------------
 
-        print(
-            "\nDetected dataset roles:"
-        )
+        print("\nDetected dataset roles:")
 
         print(
             f"  Training   : "
@@ -891,7 +730,6 @@ class NLPDataIngestion:
         # ========================================================
 
         if train_files:
-
             print(
                 "\nUsing explicitly provided "
                 "train/validation/test datasets."
@@ -908,11 +746,8 @@ class NLPDataIngestion:
             validation_data = None
 
             if validation_files:
-
-                validation_data = (
-                    self._read_dataset(
-                        validation_files[0]
-                    )
+                validation_data = self._read_dataset(
+                    validation_files[0]
                 )
 
         # ========================================================
@@ -920,9 +755,7 @@ class NLPDataIngestion:
         # ========================================================
 
         else:
-
             if not normal_files:
-
                 raise ValueError(
                     "\nNo usable NLP dataset found."
                 )
@@ -932,7 +765,6 @@ class NLPDataIngestion:
             # ----------------------------------------------------
 
             if len(normal_files) == 1:
-
                 print(
                     f"\nUsing dataset:"
                     f" {normal_files[0].name}"
@@ -947,33 +779,22 @@ class NLPDataIngestion:
             # ----------------------------------------------------
 
             else:
-
-                groups = (
-                    self._group_normal_datasets(
-                        normal_files
-                    )
+                groups = self._group_normal_datasets(
+                    normal_files
                 )
 
                 if len(groups) == 1:
-
-                    data = (
-                        self._combine_same_schema_files(
-                            groups[0]
-                        )
+                    data = self._combine_same_schema_files(
+                        groups[0]
                     )
 
                 else:
-
-                    selected_group = (
-                        self._ask_dataset_choice(
-                            groups
-                        )
+                    selected_group = self._ask_dataset_choice(
+                        groups
                     )
 
-                    data = (
-                        self._combine_same_schema_files(
-                            selected_group
-                        )
+                    data = self._combine_same_schema_files(
+                        selected_group
                     )
 
             # ----------------------------------------------------
@@ -985,12 +806,10 @@ class NLPDataIngestion:
                 "train/test split..."
             )
 
-            train_data, test_data = (
-                train_test_split(
-                    data,
-                    test_size=self.test_size,
-                    random_state=self.random_state,
-                )
+            train_data, test_data = train_test_split(
+                data,
+                test_size=self.test_size,
+                random_state=self.random_state,
             )
 
             validation_data = None
@@ -1017,12 +836,9 @@ class NLPDataIngestion:
         validation_path = None
 
         if validation_data is not None:
-
-            validation_path = (
-                self._save_dataset(
-                    validation_data,
-                    "validation.csv",
-                )
+            validation_path = self._save_dataset(
+                validation_data,
+                "validation.csv",
             )
 
         test_path = self._save_dataset(
@@ -1034,17 +850,9 @@ class NLPDataIngestion:
         # 7. Summary
         # --------------------------------------------------------
 
-        print(
-            "\n" + "=" * 60
-        )
-
-        print(
-            "NLP DATA INGESTION SUMMARY"
-        )
-
-        print(
-            "=" * 60
-        )
+        print("\n" + "=" * 60)
+        print("NLP DATA INGESTION SUMMARY")
+        print("=" * 60)
 
         print(
             f"\nTraining samples   : "
@@ -1067,7 +875,6 @@ class NLPDataIngestion:
         )
 
         if validation_path:
-
             print(
                 f"\nValidation file:"
                 f"\n{validation_path}"
@@ -1082,9 +889,7 @@ class NLPDataIngestion:
             "\nNLP data ingestion completed successfully."
         )
 
-        print(
-            "=" * 60
-        )
+        print("=" * 60)
 
         return (
             train_data,
