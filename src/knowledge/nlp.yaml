@@ -1,0 +1,643 @@
+
+schema_version: "1.0"
+scope: nlp
+domain: natural_language_processing
+
+# 1. NLP task types
+tasks:
+  text_classification:
+    description: "Assign one or more predefined categories to text."
+    aliases:
+      - text classification
+      - document classification
+      - text categorization
+      - text categorisation
+      - document categorization
+      - spam detection
+      - topic classification
+      - news classification
+    supported_problem_shapes:
+      - binary
+      - multiclass
+      - multilabel
+    target_type: categorical
+    default_metrics:
+      - accuracy
+      - precision
+      - recall
+      - f1
+    metric_guidance:
+      - "Use precision, recall and F1 for imbalanced classes."
+      - "Configure averaging explicitly for multiclass and multilabel problems."
+
+  sentiment_analysis:
+    description: "Identify sentiment or opinion expressed in text."
+    aliases:
+      - sentiment analysis
+      - opinion mining
+      - emotion classification
+      - positive negative classification
+      - review sentiment
+      - customer sentiment
+      - polarity detection
+    supported_problem_shapes:
+      - binary
+      - multiclass
+    target_type: categorical
+    default_metrics:
+      - accuracy
+      - precision
+      - recall
+      - f1
+    metric_guidance:
+      - "Use class-wise precision, recall and F1 when sentiment classes are imbalanced."
+
+  text_regression:
+    description: "Predict a continuous numerical value from text."
+    aliases:
+      - text regression
+      - predict score from text
+      - rating prediction from text
+      - review score prediction
+    target_type: numerical
+    default_metrics:
+      - mae
+      - mse
+      - rmse
+      - r2
+
+  named_entity_recognition:
+    description: "Identify and classify named entities within text."
+    aliases:
+      - named entity recognition
+      - ner
+      - entity extraction
+      - extract names
+      - extract locations
+      - extract organizations
+      - identify entities
+    target_type: sequence_labels
+    default_metrics:
+      - precision
+      - recall
+      - f1
+    metric_guidance:
+      - "Evaluate entity-level precision, recall and F1."
+      - "Specify whether exact span matching or another matching scheme is used."
+
+  text_clustering:
+    description: "Group documents or text records based on similarity without predefined labels."
+    aliases:
+      - text clustering
+      - document clustering
+      - group similar documents
+      - group similar text
+      - topic grouping
+    target_type: none
+    default_metrics:
+      - silhouette_score
+    metric_guidance:
+      - "Use suitable vector representations before clustering."
+      - "Interpret clusters using representative documents or important terms."
+
+  keyword_extraction:
+    description: "Identify important words or phrases from text."
+    aliases:
+      - keyword extraction
+      - extract keywords
+      - keyphrase extraction
+      - important words
+      - important phrases
+    target_type: none
+    default_metrics: []
+
+  text_summarization:
+    description: "Produce a shorter representation of a longer text while preserving important information."
+    aliases:
+      - text summarization
+      - document summarization
+      - summarize text
+      - generate summary
+      - extractive summarization
+      - abstractive summarization
+    target_type: text
+    default_metrics:
+      - rouge
+    metric_guidance:
+      - "ROUGE can measure lexical overlap with reference summaries."
+      - "Automatic metrics do not fully measure factual correctness or summary quality."
+
+# 2. Text input characteristics
+text_inputs:
+  supported_formats:
+    - .txt
+    - .csv
+    - .tsv
+    - .json
+    - .jsonl
+    - .xlsx
+    - .parquet
+
+  common_columns:
+    text:
+      aliases:
+        - text
+        - content
+        - document
+        - message
+        - review
+        - comment
+        - sentence
+        - description
+        - body
+
+    target:
+      aliases:
+        - label
+        - category
+        - class
+        - sentiment
+        - target
+        - output
+
+    identifier:
+      aliases:
+        - id
+        - document_id
+        - record_id
+        - review_id
+        - user_id
+
+  dataset_inspection:
+    inspect:
+      - row_count
+      - column_names
+      - data_types
+      - missing_text_count
+      - empty_text_count
+      - duplicate_text_count
+      - text_length_statistics
+      - word_count_statistics
+      - language_distribution_when_detectable
+      - target_class_distribution_when_available
+
+    text_column_detection:
+      automatic_detection: true
+      require_confirmation_when_ambiguous: true
+      consider:
+        - column_name
+        - average_text_length
+        - average_word_count
+        - unique_value_ratio
+        - data_type
+
+    target_detection:
+      automatic_detection: true
+      require_confirmation_when_ambiguous: true
+      never_assume_target_from_column_position: true
+
+# 3. Text preprocessing
+preprocessing:
+  text_cleaning:
+    description: "Clean raw text while preserving meaningful information."
+    operations:
+      - whitespace_normalization
+      - unicode_normalization
+      - remove_unwanted_html
+      - remove_unwanted_special_characters
+      - handle_urls
+      - handle_email_addresses
+    aliases:
+      - clean text
+      - text cleaning
+      - normalize text
+      - remove noise
+
+  lowercasing:
+    description: "Convert text to lowercase when case information is not important."
+    aliases:
+      - lowercase
+      - lower casing
+      - convert to lowercase
+    conditional: true
+
+  tokenization:
+    description: "Split text into smaller units such as words or sentences."
+    methods:
+      - word_tokenization
+      - sentence_tokenization
+    aliases:
+      - tokenize
+      - tokenization
+      - split into words
+      - word splitting
+
+  stopword_removal:
+    description: "Remove common words that may not contribute useful information."
+    aliases:
+      - stopword removal
+      - remove stopwords
+      - remove common words
+    conditional: true
+    note: "Do not automatically remove negation words such as not or never when they affect meaning."
+
+  stemming:
+    description: "Reduce words to approximate root forms."
+    methods:
+      - porter_stemming
+      - snowball_stemming
+    aliases:
+      - stemming
+      - stem words
+      - word stemming
+    conditional: true
+
+  lemmatization:
+    description: "Convert words to their dictionary base forms."
+    aliases:
+      - lemmatization
+      - lemmatize
+      - word normalization
+    conditional: true
+
+  punctuation_handling:
+    description: "Handle punctuation according to the task and text characteristics."
+    aliases:
+      - remove punctuation
+      - punctuation removal
+    conditional: true
+
+  number_handling:
+    description: "Preserve, normalize or remove numbers depending on their importance."
+    aliases:
+      - remove numbers
+      - number normalization
+      - numerical text cleaning
+    conditional: true
+
+  language_handling:
+    description: "Detect or configure the language of input text."
+    aliases:
+      - language detection
+      - multilingual text
+      - language identification
+    note: "Tokenization, stopwords and lemmatization must use suitable language resources."
+
+# 4. Text representation and feature extraction
+representations:
+  bag_of_words:
+    display_name: "Bag of Words"
+    aliases:
+      - bag of words
+      - bow
+      - count vectorization
+      - count vectorizer
+    description: "Represent documents using token occurrence counts."
+    preprocessing:
+      - tokenization
+    strengths:
+      - "Simple and interpretable baseline."
+      - "Suitable for many traditional text classification tasks."
+    limitations:
+      - "Does not directly capture word order or contextual meaning."
+
+  tfidf:
+    display_name: "TF-IDF"
+    aliases:
+      - tfidf
+      - tf-idf
+      - term frequency inverse document frequency
+      - tf idf vectorizer
+    description: "Represent text using term frequency weighted by inverse document frequency."
+    preprocessing:
+      - tokenization
+    strengths:
+      - "Effective baseline for many document classification tasks."
+      - "Produces sparse numerical features."
+      - "Works with several traditional ML algorithms."
+    limitations:
+      - "Does not directly understand contextual meaning."
+      - "Unseen vocabulary requires appropriate handling."
+
+  word_embeddings:
+    display_name: "Word Embeddings"
+    aliases:
+      - word embeddings
+      - word2vec
+      - glove
+      - fasttext
+      - word vectors
+    description: "Represent words as dense numerical vectors."
+    preprocessing:
+      - tokenization
+    strengths:
+      - "Captures semantic relationships better than simple token counts in many settings."
+    limitations:
+      - "Requires suitable pretrained vectors or training data."
+      - "Static word embeddings do not represent context-dependent meanings."
+
+  sentence_embeddings:
+    display_name: "Sentence Embeddings"
+    aliases:
+      - sentence embeddings
+      - document embeddings
+      - semantic embeddings
+      - text embeddings
+    description: "Represent sentences or documents as dense vectors."
+    preprocessing:
+      - text_cleaning
+    strengths:
+      - "Useful for semantic similarity and document retrieval."
+    limitations:
+      - "Often requires pretrained embedding models and additional dependencies."
+      - "Model selection must consider language and hardware requirements."
+
+# 5. NLP algorithms and models
+algorithms:
+  multinomial_naive_bayes:
+    display_name: "Multinomial Naive Bayes"
+    aliases:
+      - multinomial naive bayes
+      - mnb
+    supported_tasks:
+      - text_classification
+      - sentiment_analysis
+    representations:
+      - bag_of_words
+      - tfidf
+    strengths:
+      - "Fast traditional baseline for text classification."
+      - "Works naturally with non-negative token count features."
+    limitations:
+      - "Relies on conditional-independence assumptions."
+
+  logistic_regression:
+    display_name: "Logistic Regression"
+    aliases:
+      - logistic regression
+      - logit
+    supported_tasks:
+      - text_classification
+      - sentiment_analysis
+    representations:
+      - bag_of_words
+      - tfidf
+    strengths:
+      - "Strong and interpretable traditional text classification baseline."
+      - "Works well with sparse text representations."
+    limitations:
+      - "Learns a linear decision boundary in the feature space."
+
+  linear_svc:
+    display_name: "Linear Support Vector Classifier"
+    aliases:
+      - linear svc
+      - linear svm
+      - linear support vector machine
+      - linear support vector classifier
+    supported_tasks:
+      - text_classification
+      - sentiment_analysis
+    representations:
+      - bag_of_words
+      - tfidf
+    strengths:
+      - "Effective for high-dimensional sparse text features."
+      - "Often performs well on traditional document classification."
+    limitations:
+      - "Does not directly provide probability estimates."
+      - "Requires suitable regularization and tuning."
+
+  random_forest:
+    display_name: "Random Forest"
+    aliases:
+      - random forest
+      - rf
+    supported_tasks:
+      - text_classification
+      - sentiment_analysis
+    representations:
+      - bag_of_words
+      - tfidf
+    strengths:
+      - "Can model nonlinear relationships in numerical text representations."
+    limitations:
+      - "High-dimensional sparse text data can increase memory and computational requirements."
+      - "May be less efficient than linear models for large sparse vocabularies."
+
+  kmeans:
+    display_name: "K-Means"
+    aliases:
+      - kmeans
+      - k-means
+      - k means
+    supported_tasks:
+      - text_clustering
+    representations:
+      - tfidf
+      - word_embeddings
+      - sentence_embeddings
+    strengths:
+      - "Can group documents using vector representations."
+    limitations:
+      - "Requires the number of clusters to be specified."
+      - "Results depend on the quality of the text representation."
+
+  dbscan:
+    display_name: "DBSCAN"
+    aliases:
+      - dbscan
+    supported_tasks:
+      - text_clustering
+    representations:
+      - word_embeddings
+      - sentence_embeddings
+    strengths:
+      - "Can identify dense groups and mark isolated documents as noise."
+    limitations:
+      - "High-dimensional sparse TF-IDF spaces can make distance-based clustering difficult."
+      - "Sensitive to density parameters and representation quality."
+
+# 6. NLP evaluation metrics
+metrics:
+  accuracy:
+    description: "Fraction of correctly classified text records."
+    supported_tasks:
+      - text_classification
+      - sentiment_analysis
+    aliases:
+      - accuracy
+
+  precision:
+    description: "Fraction of predicted positive cases that are actually positive."
+    supported_tasks:
+      - text_classification
+      - sentiment_analysis
+      - named_entity_recognition
+    aliases:
+      - precision
+
+  recall:
+    description: "Fraction of actual positive cases that are identified."
+    supported_tasks:
+      - text_classification
+      - sentiment_analysis
+      - named_entity_recognition
+    aliases:
+      - recall
+
+  f1:
+    description: "Harmonic mean of precision and recall."
+    supported_tasks:
+      - text_classification
+      - sentiment_analysis
+      - named_entity_recognition
+    aliases:
+      - f1
+      - f1 score
+
+  mae:
+    description: "Mean absolute error."
+    supported_tasks:
+      - text_regression
+    aliases:
+      - mae
+      - mean absolute error
+
+  mse:
+    description: "Mean squared error."
+    supported_tasks:
+      - text_regression
+    aliases:
+      - mse
+      - mean squared error
+
+  rmse:
+    description: "Root mean squared error."
+    supported_tasks:
+      - text_regression
+    aliases:
+      - rmse
+      - root mean squared error
+
+  r2:
+    description: "Coefficient of determination."
+    supported_tasks:
+      - text_regression
+    aliases:
+      - r2
+      - r squared
+
+  silhouette_score:
+    description: "Measures cohesion and separation of clusters."
+    supported_tasks:
+      - text_clustering
+    aliases:
+      - silhouette score
+      - silhouette coefficient
+
+  rouge:
+    description: "Measures lexical overlap between generated and reference summaries."
+    supported_tasks:
+      - text_summarization
+    aliases:
+      - rouge
+      - rouge score
+      - rouge 1
+      - rouge 2
+      - rouge l
+
+# 7. NLP compatibility rules
+compatibility_rules:
+  - id: text_input_routing
+    description: "Raw text input should use NLP preprocessing and text representation."
+    severity: error
+
+  - id: representation_algorithm_compatibility
+    description: "Only select algorithms compatible with the chosen text representation."
+    severity: error
+
+  - id: classification_target_required
+    description: "Supervised text classification requires labelled examples."
+    applies_to:
+      - text_classification
+      - sentiment_analysis
+    severity: clarification
+
+  - id: clustering_does_not_require_labels
+    description: "Text clustering does not require predefined target labels."
+    applies_to:
+      - text_clustering
+    severity: validation
+
+  - id: preserve_negation
+    description: "Avoid removing negation words when they can change sentiment or text meaning."
+    severity: recommendation
+
+  - id: language_resource_compatibility
+    description: "Language-dependent preprocessing must use appropriate language resources."
+    severity: validation
+
+  - id: summarization_reference_requirement
+    description: "Reference summaries are needed for conventional reference-based ROUGE evaluation."
+    applies_to:
+      - text_summarization
+    severity: clarification
+
+# 8. NLP selection guidance
+selection_guidance:
+  - condition: "labelled_text_data and text_classification"
+    suggestions:
+      - multinomial_naive_bayes
+      - logistic_regression
+      - linear_svc
+    representation:
+      - tfidf
+      - bag_of_words
+    note: "Start with lightweight traditional ML baselines before considering more resource-intensive approaches."
+
+  - condition: "labelled_text_data and sentiment_analysis"
+    suggestions:
+      - multinomial_naive_bayes
+      - logistic_regression
+      - linear_svc
+    representation:
+      - tfidf
+      - bag_of_words
+    note: "Preserve negation and evaluate class imbalance."
+
+  - condition: "unlabelled_text_data and text_clustering"
+    suggestions:
+      - kmeans
+      - dbscan
+    representation:
+      - tfidf
+      - word_embeddings
+      - sentence_embeddings
+    note: "Choose representation and distance strategy according to dataset size and semantic requirements."
+
+  - condition: "text_regression"
+    route_to: ml
+    note: "Use NLP representations to extract features, followed by a compatible ML regression estimator."
+
+  - condition: "named_entity_recognition"
+    note: "Requires token-level or span-level annotations and a suitable sequence-labelling implementation."
+
+  - condition: "keyword_extraction"
+    note: "Can use statistical or linguistic extraction methods without supervised model training."
+
+  - condition: "text_summarization"
+    note: "Requires a dedicated summarization approach; do not assume a traditional text classifier can generate summaries."
+
+# 9. Default NLP planning settings
+defaults:
+  preserve_original_text: true
+  preserve_test_set_until_final_evaluation: true
+  lowercase_when_appropriate: true
+  remove_stopwords_when_appropriate: true
+  preserve_negation: true
+  baseline_first: true
+  use_tfidf_as_initial_representation_when_suitable: true
+  prefer_lightweight_models_when_compute_is_limited: true
+  random_state: 42
+  test_size: 0.2

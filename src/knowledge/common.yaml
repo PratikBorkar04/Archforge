@@ -1,0 +1,393 @@
+schema_version: "1.0"
+scope: shared
+
+supported_domains:
+  - ml
+  - nlp
+
+# Shared project requirement fields
+project_fields:
+  project_name:
+    description: "Name requested for the generated project."
+    aliases:
+      - project name
+      - application name
+      - repository name
+
+  objective:
+    description: "What the user wants the system to achieve."
+    aliases:
+      - goal
+      - aim
+      - purpose
+      - project objective
+      - what I want to build
+    required_for_planning: true
+
+  problem_statement:
+    description: "The problem or business need the project should address."
+    aliases:
+      - problem
+      - use case
+      - business problem
+      - requirement
+      - project description
+
+  input_data:
+    description: "The data or source material supplied to the project."
+    aliases:
+      - dataset
+      - data
+      - input data
+      - source data
+      - training data
+      - input file
+      - data source
+
+  input_features:
+    description: "Columns, fields, or attributes used as model inputs."
+    aliases:
+      - features
+      - independent variables
+      - predictors
+      - input variables
+      - attributes
+      - columns
+
+  target_variable:
+    description: "The value or field the project is expected to predict or learn."
+    aliases:
+      - target
+      - target column
+      - label
+      - labels
+      - output variable
+      - dependent variable
+      - response variable
+    ambiguity_note: >
+      Do not assume a column is the target merely because it is named
+      'output' or 'label'. Confirm when multiple candidates exist or
+      the description does not identify one clearly.
+
+  expected_output:
+    description: "The result the generated project should produce."
+    aliases:
+      - output
+      - prediction
+      - result
+      - expected result
+      - response
+      - generated output
+
+  evaluation_requirement:
+    description: "How the user expects the project to be assessed."
+    aliases:
+      - evaluation
+      - model evaluation
+      - performance measurement
+      - success criteria
+      - performance requirement
+
+  deployment_requirement:
+    description: "Where or how the user wants to run or access the project."
+    aliases:
+      - deployment
+      - deploy
+      - hosting
+      - production
+      - web application
+      - API
+      - local application
+
+  project_constraints:
+    description: "Limitations or preferences that influence project planning."
+    aliases:
+      - constraints
+      - limitations
+      - preferences
+      - requirements
+      - restrictions
+
+# Shared data terminology
+data_concepts:
+  dataset:
+    description: "A collection of records used by the project."
+    aliases:
+      - data
+      - data file
+      - data files
+      - records
+      - samples
+      - examples
+
+  feature:
+    description: "An input variable or attribute describing a record."
+    aliases:
+      - predictor
+      - input variable
+      - independent variable
+      - attribute
+      - field
+
+  target:
+    description: "The value the model is intended to learn or predict."
+    aliases:
+      - label
+      - response
+      - dependent variable
+      - output variable
+
+  record:
+    description: "One observation or example in a dataset."
+    aliases:
+      - row
+      - instance
+      - sample
+      - observation
+      - data point
+
+  metadata:
+    description: "Information describing a dataset or record."
+    aliases:
+      - data metadata
+      - file information
+      - record metadata
+      - identifier information
+
+  data_split:
+    description: "A partition of data reserved for a particular development stage."
+    aliases:
+      - train set
+      - training set
+      - validation set
+      - validation data
+      - test set
+      - testing data
+      - holdout set
+
+  model_artifact:
+    description: "A saved or reusable model produced by training."
+    aliases:
+      - trained model
+      - model file
+      - estimator
+      - classifier
+      - predictor
+
+# Common file formats
+data_formats:
+  tabular:
+    description: "Formats commonly used to store rows and columns."
+    extensions:
+      - .csv
+      - .tsv
+      - .xlsx
+      - .xls
+      - .parquet
+    aliases:
+      - spreadsheet
+      - table
+      - tabular file
+      - csv file
+      - excel file
+
+  text:
+    description: "Plain-text and line-oriented text formats."
+    extensions:
+      - .txt
+      - .text
+      - .jsonl
+    aliases:
+      - text file
+      - plain text
+      - raw text
+      - json lines
+
+  structured:
+    description: "Structured data interchange formats."
+    extensions:
+      - .json
+      - .xml
+    aliases:
+      - json file
+      - structured file
+      - xml file
+
+# Project lifecycle actions shared by ML and NLP
+lifecycle_actions:
+  data_preparation:
+    description: "Preparing supplied data for subsequent project steps."
+    aliases:
+      - prepare data
+      - clean data
+      - preprocess data
+      - data preparation
+      - data cleaning
+
+  training:
+    description: "Fitting a model using available data."
+    aliases:
+      - train
+      - training
+      - fit
+      - model building
+      - learn from data
+
+  inference:
+    description: "Using a trained model to produce outputs for new inputs."
+    aliases:
+      - predict
+      - prediction
+      - inference
+      - make predictions
+      - classify new data
+      - run the model
+
+  evaluation:
+    description: "Measuring model or system performance."
+    aliases:
+      - evaluate
+      - test model
+      - assess performance
+      - validate performance
+      - benchmark
+
+  deployment:
+    description: "Making the project available outside the development workflow."
+    aliases:
+      - deploy
+      - serve
+      - host
+      - publish
+      - productionize
+
+# Constraints that can affect architecture selection
+constraint_types:
+  compute:
+    description: "Available hardware and computational resources."
+    aliases:
+      - hardware
+      - compute
+      - RAM
+      - memory
+      - CPU
+      - GPU
+      - limited resources
+      - low-resource machine
+
+  runtime:
+    description: "Time limits for training, processing, or responding."
+    aliases:
+      - runtime
+      - execution time
+      - training time
+      - latency
+      - response time
+      - real-time
+
+  interpretability:
+    description: "How understandable or explainable system decisions must be."
+    aliases:
+      - interpretability
+      - explainability
+      - explainable model
+      - transparent model
+      - easy to interpret
+
+  privacy:
+    description: "Requirements concerning sensitive data and data handling."
+    aliases:
+      - privacy
+      - data privacy
+      - confidential data
+      - sensitive data
+      - on-premises
+      - offline processing
+
+  deployment_environment:
+    description: "The intended environment in which the project will run."
+    aliases:
+      - environment
+      - platform
+      - operating system
+      - cloud
+      - local machine
+      - server
+
+  dependency_preference:
+    description: "Preferences or restrictions on external packages and services."
+    aliases:
+      - dependencies
+      - libraries
+      - packages
+      - external services
+      - API usage
+      - third-party service
+
+# Distinguish mandatory requirements from preferences and exclusions
+requirement_strength:
+  must:
+    description: "An explicit mandatory requirement."
+    signals:
+      - must
+      - required
+      - need to
+      - have to
+      - mandatory
+
+  preferred:
+    description: "A preference to prioritize when feasible."
+    signals:
+      - prefer
+      - preferably
+      - would like
+      - ideally
+      - should
+
+  excluded:
+    description: "An explicitly prohibited approach, tool, or dependency."
+    signals:
+      - do not use
+      - don't use
+      - avoid
+      - must not
+      - without
+      - no external
+
+  optional:
+    description: "A feature that may be included but is not necessary."
+    signals:
+      - optional
+      - if possible
+      - can include
+      - nice to have
+
+# Rules for interpreting descriptions safely
+interpretation_policy:
+  explicit_over_inferred: true
+  preserve_user_terminology: true
+  do_not_invent_missing_values: true
+
+  ask_when_multiple_candidates:
+    - target_variable
+    - input_features
+    - deployment_requirement
+
+  unresolved_values:
+    action: mark_as_unresolved
+    do_not_silently_apply_domain_defaults: true
+
+  conflicting_requirements:
+    action: request_clarification
+
+  conflict_resolution:
+    - "An explicit prohibition must not be overridden by a preference or default."
+    - "If a mandatory requirement conflicts with an explicit prohibition, request clarification."
+
+# Text normalization settings for future parser
+normalization:
+  case_insensitive_matching: true
+  trim_extra_whitespace: true
+  preserve_original_description: true
+  preserve_original_column_names: true
+  extensions_case_insensitive: true

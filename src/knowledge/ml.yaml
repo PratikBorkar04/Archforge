@@ -1,0 +1,714 @@
+
+schema_version: "1.0"
+scope: ml
+domain: machine_learning
+
+# 1. Machine Learning task types
+tasks:
+  classification:
+    description: "Predict a discrete class or category."
+    aliases:
+      - classification
+      - classify
+      - categorise
+      - categorize
+      - predict a category
+      - predict a class
+      - spam detection
+      - disease classification
+      - fraud detection
+    target_type: categorical
+    supported_problem_shapes:
+      - binary
+      - multiclass
+      - multilabel
+    default_metrics:
+      - accuracy
+      - precision
+      - recall
+      - f1
+    metric_handling:
+      binary:
+        default_average: binary
+      multiclass:
+        default_average: weighted
+        allow_macro_average: true
+      multilabel:
+        require_multilabel_compatible_metrics: true
+        configure_averaging_explicitly: true
+    metric_guidance:
+      - "Prefer precision, recall and F1 when class distribution is imbalanced."
+      - "Use ROC-AUC for binary classification when suitable probability estimates or decision scores are available."
+      - "Use macro or weighted averaging for multiclass metrics according to class balance and evaluation goals."
+      - "Configure multilabel metrics explicitly rather than assuming ordinary single-label evaluation."
+
+  regression:
+    description: "Predict a continuous numerical value."
+    aliases:
+      - regression
+      - predict a value
+      - estimate a value
+      - price prediction
+      - sales prediction
+      - demand forecasting
+      - numerical prediction
+    target_type: numerical
+    supported_problem_shapes:
+      - single_output
+      - multi_output
+    default_metrics:
+      - mae
+      - mse
+      - rmse
+      - r2
+    metric_handling:
+      single_output:
+        default_evaluation: standard_regression_metrics
+      multi_output:
+        require_per_target_or_multioutput_evaluation: true
+        configure_aggregation_explicitly: true
+    metric_guidance:
+      - "Use MAE when errors should be interpreted in the target's original units."
+      - "Use RMSE when larger errors should receive a stronger penalty."
+      - "Use R2 as a complementary goodness-of-fit measure, not as the only metric."
+      - "For multi-output regression, configure per-target or aggregated evaluation explicitly."
+
+  clustering:
+    description: "Group observations by similarity without requiring target labels."
+    aliases:
+      - clustering
+      - cluster data
+      - customer segmentation
+      - group similar records
+      - discover groups
+      - unsupervised grouping
+    target_type: none
+    default_metrics:
+      - silhouette_score
+    metric_guidance:
+      - "Use internal clustering metrics only when their assumptions are appropriate."
+      - "If ground-truth labels exist, external metrics may also be considered."
+
+  anomaly_detection:
+    description: "Identify observations that differ substantially from expected patterns."
+    aliases:
+      - anomaly detection
+      - outlier detection
+      - detect anomalies
+      - identify unusual records
+      - fraud outlier detection
+    target_type: optional
+    default_metrics:
+      - precision
+      - recall
+      - f1
+    metric_guidance:
+      - "Use precision, recall and F1 when ground-truth anomaly labels are available."
+      - "PR-AUC and ROC-AUC can be used with ground-truth labels and continuous anomaly scores."
+      - "Without labels, use anomaly scores, contamination settings, threshold analysis and domain review."
+      - "Do not report supervised evaluation metrics without ground-truth labels."
+
+# 2. ML algorithms
+algorithms:
+
+
+  linear_regression:
+    display_name: "Linear Regression"
+    aliases:
+      - "linear regression"
+      - "linear regressor"
+      - "ordinary least squares"
+      - "ols regression"
+      - "multiple linear regression"
+    supported_tasks:
+      - regression
+    strengths:
+      - "Simple and interpretable baseline for regression"
+      - "Fast to train"
+      - "Works well when relationships are approximately linear"
+    limitations:
+      - "May underfit nonlinear relationships"
+      - "Sensitive to multicollinearity and outliers"
+    input_requirements:
+      - "Numerical features"
+      - "Categorical features must be encoded"
+    preprocessing:
+      - missing_value_handling
+      - categorical_encoding
+
+  logistic_regression:
+    display_name: "Logistic Regression"
+    aliases:
+      - logistic regression
+      - logit
+    supported_tasks:
+      - classification
+    input_requirements:
+      - numerical_features
+    preprocessing:
+      - missing_value_handling
+      - categorical_encoding
+      - feature_scaling
+    strengths:
+      - "Interpretable baseline for many classification problems."
+      - "Efficient on many small and medium-sized datasets."
+    limitations:
+      - "Models a linear decision boundary in the transformed feature space."
+      - "May need feature engineering for nonlinear relationships."
+
+  decision_tree:
+    display_name: "Decision Tree"
+    aliases:
+      - decision tree
+      - decision trees
+      - cart
+    supported_tasks:
+      - classification
+      - regression
+    input_requirements:
+      - numerical_features
+    preprocessing:
+      - missing_value_handling
+      - categorical_encoding
+    strengths:
+      - "Can model nonlinear relationships."
+      - "Does not generally require feature scaling."
+      - "Can be relatively easy to interpret when kept small."
+    limitations:
+      - "Can overfit without suitable depth and leaf constraints."
+
+  random_forest:
+    display_name: "Random Forest"
+    aliases:
+      - random forest
+      - random forests
+      - rf
+    supported_tasks:
+      - classification
+      - regression
+    input_requirements:
+      - numerical_features
+    preprocessing:
+      - missing_value_handling
+      - categorical_encoding
+    strengths:
+      - "Strong general-purpose baseline for tabular data."
+      - "Can model nonlinear relationships and feature interactions."
+      - "Usually less sensitive to individual noisy observations than a single tree."
+    limitations:
+      - "Can require more memory and inference time than a single decision tree."
+      - "Less directly interpretable than a small decision tree."
+
+  support_vector_machine:
+    display_name: "Support Vector Machine"
+    aliases:
+      - support vector machine
+      - support vector machines
+      - svm
+      - svc
+    supported_tasks:
+      - classification
+    input_requirements:
+      - numerical_features
+    preprocessing:
+      - missing_value_handling
+      - categorical_encoding
+      - feature_scaling
+    strengths:
+      - "Can model nonlinear boundaries with suitable kernels."
+      - "Can work well on small and medium-sized datasets."
+    limitations:
+      - "Kernel methods can become expensive on large datasets."
+      - "Feature scaling is important."
+      - "Probability estimates require additional configuration."
+
+  support_vector_regression:
+    display_name: "Support Vector Regression"
+    aliases:
+      - support vector regression
+      - svr
+    supported_tasks:
+      - regression
+    input_requirements:
+      - numerical_features
+    preprocessing:
+      - missing_value_handling
+      - categorical_encoding
+      - feature_scaling
+    strengths:
+      - "Can model nonlinear relationships with suitable kernels."
+    limitations:
+      - "Kernel methods can become expensive on large datasets."
+      - "Feature scaling is important."
+
+  knn:
+    display_name: "K-Nearest Neighbors"
+    aliases:
+      - knn
+      - k nearest neighbors
+      - nearest neighbors
+    supported_tasks:
+      - classification
+      - regression
+    input_requirements:
+      - numerical_features
+    preprocessing:
+      - missing_value_handling
+      - categorical_encoding
+      - feature_scaling
+    strengths:
+      - "Simple distance-based baseline."
+      - "Can model nonlinear decision boundaries."
+    limitations:
+      - "Prediction can be slow on large datasets."
+      - "Sensitive to feature scales and irrelevant dimensions."
+      - "High-dimensional data can reduce distance usefulness."
+
+  naive_bayes:
+    display_name: "Naive Bayes"
+    aliases:
+      - naive bayes
+      - naive bayes classifier
+      - gaussian naive bayes
+      - multinomial naive bayes
+      - bernoulli naive bayes
+    supported_tasks:
+      - classification
+    input_requirements:
+      - numerical_features
+    preprocessing:
+      - missing_value_handling
+      - categorical_encoding
+    strengths:
+      - "Fast baseline for classification problems."
+      - "Can work well with suitable numerical or categorical feature representations."
+    limitations:
+      - "Relies on conditional-independence assumptions."
+      - "The appropriate variant depends on the input feature distribution."
+
+  gradient_boosting:
+    display_name: "Gradient Boosting"
+    aliases:
+      - gradient boosting
+      - gradient boosted trees
+      - gradient boosting machine
+      - gbm
+    supported_tasks:
+      - classification
+      - regression
+    input_requirements:
+      - numerical_features
+    preprocessing:
+      - missing_value_handling
+      - categorical_encoding
+    strengths:
+      - "Can model complex nonlinear patterns in tabular data."
+    limitations:
+      - "Requires tuning to control overfitting and training time."
+
+  xgboost:
+    display_name: "XGBoost"
+    aliases:
+      - xgboost
+      - extreme gradient boosting
+      - xgb
+    supported_tasks:
+      - classification
+      - regression
+    input_requirements:
+      - numerical_features
+    preprocessing:
+      - missing_value_handling
+      - categorical_encoding
+    dependency:
+      package: xgboost
+      optional: true
+    strengths:
+      - "Powerful gradient-boosted tree method for structured data."
+      - "Offers regularization and configurable training controls."
+    limitations:
+      - "Adds an external dependency."
+      - "Can require tuning and more compute than simpler baselines."
+
+  kmeans:
+    display_name: "K-Means"
+    aliases:
+      - k means
+      - k-means
+      - kmeans
+    supported_tasks:
+      - clustering
+    input_requirements:
+      - numerical_features
+    preprocessing:
+      - missing_value_handling
+      - categorical_encoding
+      - feature_scaling
+    strengths:
+      - "Efficient baseline when clusters are reasonably compact and distance-based."
+    limitations:
+      - "Requires a chosen number of clusters."
+      - "Sensitive to feature scales, initialization and outliers."
+      - "Not suitable for every cluster shape."
+
+  dbscan:
+    display_name: "DBSCAN"
+    aliases:
+      - dbscan
+      - density based clustering
+      - density-based spatial clustering
+    supported_tasks:
+      - clustering
+    input_requirements:
+      - numerical_features
+    preprocessing:
+      - missing_value_handling
+      - categorical_encoding
+      - feature_scaling
+    strengths:
+      - "Can identify dense groups and mark isolated points as noise."
+      - "Does not require specifying the number of clusters in advance."
+    limitations:
+      - "Sensitive to distance scale and density parameters."
+      - "Can struggle when clusters have substantially different densities."
+
+  isolation_forest:
+    display_name: "Isolation Forest"
+    aliases:
+      - isolation forest
+      - isolation forests
+    supported_tasks:
+      - anomaly_detection
+    input_requirements:
+      - numerical_features
+    preprocessing:
+      - missing_value_handling
+      - categorical_encoding
+    strengths:
+      - "Useful unsupervised baseline for tabular anomaly detection."
+    limitations:
+      - "Results depend on contamination and data characteristics."
+      - "Detected anomalies require domain validation."
+
+# 3. Evaluation metrics
+metrics:
+  accuracy:
+    description: "Fraction of predictions that are correct."
+    supported_tasks:
+      - classification
+    aliases:
+      - accuracy
+      - classification accuracy
+
+  precision:
+    description: "Fraction of predicted positive cases that are actually positive."
+    supported_tasks:
+      - classification
+      - anomaly_detection
+    aliases:
+      - precision
+      - positive predictive value
+
+  recall:
+    description: "Fraction of actual positive cases that are identified."
+    supported_tasks:
+      - classification
+      - anomaly_detection
+    aliases:
+      - recall
+      - sensitivity
+      - true positive rate
+
+  f1:
+    description: "Harmonic mean of precision and recall."
+    supported_tasks:
+      - classification
+      - anomaly_detection
+    aliases:
+      - f1
+      - f1 score
+      - f measure
+
+  roc_auc:
+    description: "Area under the receiver operating characteristic curve."
+    supported_tasks:
+      - classification
+      - anomaly_detection
+    aliases:
+      - roc auc
+      - auc
+      - area under roc curve
+    requirements:
+      - "Requires suitable continuous scores or probabilities and ground-truth labels."
+      - "For multiclass tasks, an explicit averaging strategy is needed."
+
+  pr_auc:
+    description: "Area under the precision-recall curve or a suitable average-precision measure."
+    supported_tasks:
+      - classification
+      - anomaly_detection
+    aliases:
+      - pr auc
+      - average precision
+      - precision recall auc
+    requirements:
+      - "Requires ground-truth labels and suitable continuous scores."
+      - "Particularly useful for evaluating rare positive cases."
+      - "Specify the chosen implementation and averaging method."
+
+  mae:
+    description: "Mean absolute error."
+    supported_tasks:
+      - regression
+    aliases:
+      - mae
+      - mean absolute error
+
+  mse:
+    description: "Mean squared error."
+    supported_tasks:
+      - regression
+    aliases:
+      - mse
+      - mean squared error
+
+  rmse:
+    description: "Root mean squared error."
+    supported_tasks:
+      - regression
+    aliases:
+      - rmse
+      - root mean squared error
+
+  r2:
+    description: "Coefficient of determination."
+    supported_tasks:
+      - regression
+    aliases:
+      - r2
+      - r squared
+      - coefficient of determination
+
+  silhouette_score:
+    description: "Measures how similar a sample is to its own cluster compared with other clusters."
+    supported_tasks:
+      - clustering
+    aliases:
+      - silhouette score
+      - silhouette coefficient
+
+# 4. Preprocessing operations
+preprocessing:
+  missing_value_handling:
+    description: "Handle missing or null values."
+    aliases:
+      - missing values
+      - null values
+      - imputation
+      - fill missing data
+    methods:
+      - mean_imputation
+      - median_imputation
+      - most_frequent_imputation
+      - drop_rows_or_columns
+
+  categorical_encoding:
+    description: "Convert categorical variables into a model-compatible representation."
+    aliases:
+      - categorical encoding
+      - encode categories
+      - label encoding
+      - one hot encoding
+    methods:
+      - one_hot_encoding
+      - ordinal_encoding
+      - label_encoding
+
+  feature_scaling:
+    description: "Put numerical features on comparable scales."
+    aliases:
+      - scaling
+      - normalize features
+      - standardize features
+      - feature normalization
+    methods:
+      - standardization
+      - min_max_scaling
+      - robust_scaling
+
+  outlier_handling:
+    description: "Inspect and optionally handle unusually extreme observations."
+    aliases:
+      - outliers
+      - outlier removal
+      - extreme values
+    methods:
+      - domain_review
+      - clipping
+      - robust_transformation
+
+  feature_selection:
+    description: "Select a subset of useful input features."
+    aliases:
+      - feature selection
+      - select features
+      - remove irrelevant features
+    methods:
+      - filter_methods
+      - wrapper_methods
+      - embedded_methods
+
+# 5. Dataset analysis
+dataset_analysis:
+  inspect:
+    - row_count
+    - column_count
+    - column_names
+    - data_types
+    - missing_value_counts
+    - duplicate_row_count
+    - numerical_column_statistics
+    - categorical_column_cardinality
+    - target_candidate_columns
+    - class_distribution_when_applicable
+
+  target_detection:
+    automatic_detection: true
+    require_confirmation_when_ambiguous: true
+    never_assume_target_from_column_position: true
+
+  leakage_prevention:
+    split_before_preprocessing: true
+    fit_preprocessing_on_training_data_only: true
+    apply_fitted_preprocessing_to_validation_and_test: true
+    operations:
+      - missing_value_imputation
+      - categorical_encoding
+      - feature_scaling
+      - feature_selection
+    cross_validation:
+      use_pipeline: true
+      fit_preprocessing_inside_each_training_fold: true
+    never_fit_preprocessing_on_full_dataset_before_splitting: true
+
+  split_strategy:
+    classification:
+      default: stratified_train_test_split
+      test_size: 0.2
+      random_state: 42
+
+    regression:
+      default: random_train_test_split
+      test_size: 0.2
+      random_state: 42
+
+    clustering:
+      default: no_supervised_split
+
+    anomaly_detection:
+      labelled:
+        default: stratified_train_test_split
+        test_size: 0.2
+        random_state: 42
+      unlabelled:
+        default: no_supervised_split
+        training_strategy: fit_on_available_data
+        note: "Use domain knowledge or a suitable validation strategy to assess detected anomalies."
+
+# 6. Compatibility and validation rules
+compatibility_rules:
+  - id: metric_task_compatibility
+    description: "Only recommend metrics supported by the selected task."
+    severity: error
+
+  - id: algorithm_task_compatibility
+    description: "Only recommend algorithms listed as supporting the selected task."
+    severity: error
+
+  - id: scaling_for_distance_or_margin_models
+    description: "Recommend feature scaling for distance-based and margin-based algorithms."
+    applies_to:
+      - knn
+      - support_vector_machine
+      - support_vector_regression
+      - kmeans
+      - dbscan
+    severity: recommendation
+
+  - id: text_data_requires_nlp_planning
+    description: "If the primary input consists of raw text, use NLP knowledge and NLP preprocessing before selecting an ML estimator."
+    severity: routing_rule
+
+  - id: target_required_for_supervised_learning
+    description: "Classification and regression require a target variable for supervised training."
+    applies_to:
+      - classification
+      - regression
+    severity: clarification
+
+  - id: clustering_does_not_require_target
+    description: "Do not require a target variable for unsupervised clustering."
+    applies_to:
+      - clustering
+    severity: validation
+
+  - id: anomaly_labels_are_optional
+    description: "Anomaly detection may be supervised or unsupervised depending on label availability."
+    applies_to:
+      - anomaly_detection
+    severity: clarification
+
+  - id: prevent_data_leakage
+    description: "Fit preprocessing transformations only on training data or training folds."
+    severity: error
+
+  - id: multi_output_metric_configuration
+    description: "Require explicit metric averaging or per-target evaluation for multilabel and multi-output problems."
+    applies_to:
+      - classification
+      - regression
+    severity: validation
+
+# 7. Algorithm selection guidance
+selection_guidance:
+  - condition: "tabular_data and classification"
+    suggestions:
+      - logistic_regression
+      - decision_tree
+      - linear_regression
+      - random_forest
+      - gradient_boosting
+      - xgboost
+    note: "Choose based on dataset size, interpretability, feature types and compute constraints. XGBoost is an optional external dependency."
+
+  - condition: "tabular_data and regression"
+    suggestions:
+      - decision_tree
+      - random_forest
+      - gradient_boosting
+      - xgboost
+    note: "Use a simple baseline before considering more complex models. XGBoost is an optional external dependency."
+
+  - condition: "unlabelled_tabular_data and clustering"
+    suggestions:
+      - kmeans
+      - dbscan
+    note: "Inspect feature scales and cluster structure before choosing an algorithm."
+
+  - condition: "tabular_data and anomaly_detection"
+    suggestions:
+      - isolation_forest
+    note: "Validate flagged records with domain knowledge."
+
+  - condition: "raw_text_input"
+    route_to: nlp
+    note: "Use NLP-specific preprocessing and representations before selecting a downstream estimator."
+
+# 8. Default planning settings
+defaults:
+  random_state: 42
+  test_size: 0.2
+  validation_strategy: "use_validation_data_if_available_otherwise_cross_validation"
+  baseline_first: true
+  preserve_test_set_until_final_evaluation: true
+  avoid_unnecessary_feature_scaling_for_tree_based_models: true

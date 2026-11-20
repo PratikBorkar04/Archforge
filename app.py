@@ -1,16 +1,20 @@
+
 """
 app.py
 
 Main entry point for ArchForge.
+Supports Manual and Description-Based generation.
 """
 
 from pathlib import Path
 
 from rich.console import Console
 from rich.panel import Panel
+from rich.table import Table
 
 from src.recommender import get_template
 from src.generator import create_project
+from src.description_mode.description_analyzer import analyze_description
 
 console = Console()
 
@@ -20,8 +24,6 @@ console = Console()
 # ============================================================
 
 def display_banner():
-    """Display welcome banner."""
-
     console.print(
         Panel.fit(
             "[bold cyan]ArchForge[/bold cyan]\n"
@@ -32,31 +34,18 @@ def display_banner():
 
 
 def display_shortcuts():
-    """Display available navigation shortcuts."""
-
     console.print(
         "\n[dim]Shortcuts: [H] Home   [B] Back   [Q] Quit[/dim]"
     )
 
 
 def handle_shortcut(value):
-    """
-    Check whether the input is a navigation shortcut.
-
-    Returns
-    -------
-    str or None
-        Shortcut name if detected.
-    """
-
     value = value.strip().lower()
 
     if value == "h":
         return "home"
-
     if value == "b":
         return "back"
-
     if value == "q":
         return "quit"
 
@@ -68,12 +57,8 @@ def handle_shortcut(value):
 # ============================================================
 
 def select_generation_mode():
-    """Select project generation mode."""
-
     while True:
-
         console.print("\n[bold cyan]Select Generation Mode[/bold cyan]")
-
         display_shortcuts()
 
         console.print("\n1. Manual")
@@ -102,23 +87,12 @@ def select_generation_mode():
 # ============================================================
 
 def get_project_info():
-    """
-    Collect project information for manual generation.
-
-    Returns
-    -------
-    dict or str
-        Project configuration or navigation command.
-    """
-
     console.print("\n[bold cyan]Manual Mode[/bold cyan]")
-
     display_shortcuts()
 
     project_name = input("\nProject Name: ").strip()
 
     shortcut = handle_shortcut(project_name)
-
     if shortcut:
         return shortcut
 
@@ -127,14 +101,12 @@ def get_project_info():
         return get_project_info()
 
     console.print("\nSelect Project Type")
-
     console.print("1. Machine Learning")
     console.print("2. Natural Language Processing")
 
     choice = input("\nEnter choice (1-2): ").strip()
 
     shortcut = handle_shortcut(choice)
-
     if shortcut:
         return shortcut
 
@@ -146,9 +118,7 @@ def get_project_info():
     project_type = project_types.get(choice)
 
     if project_type is None:
-        console.print(
-            "[bold red]Invalid project type selected.[/bold red]"
-        )
+        console.print("[red]Invalid project type selected.[/red]")
         return get_project_info()
 
     location = input(
@@ -156,7 +126,6 @@ def get_project_info():
     ).strip()
 
     shortcut = handle_shortcut(location)
-
     if shortcut:
         return shortcut
 
@@ -175,30 +144,17 @@ def get_project_info():
 # ============================================================
 
 def get_description_info():
-    """
-    Collect project information from a description.
-
-    Returns
-    -------
-    dict or str
-        Description configuration or navigation command.
-    """
-
     console.print("\n[bold cyan]Description Based Mode[/bold cyan]")
-
     display_shortcuts()
 
     description = input("\nProject Description: ").strip()
 
     shortcut = handle_shortcut(description)
-
     if shortcut:
         return shortcut
 
     if not description:
-        console.print(
-            "[red]Project description cannot be empty.[/red]"
-        )
+        console.print("[red]Project description cannot be empty.[/red]")
         return get_description_info()
 
     location = input(
@@ -206,7 +162,6 @@ def get_description_info():
     ).strip()
 
     shortcut = handle_shortcut(location)
-
     if shortcut:
         return shortcut
 
@@ -224,20 +179,156 @@ def get_description_info():
 # ============================================================
 
 def print_summary(project):
-    """Display project summary."""
-
     console.print("\n[bold green]Project Summary[/bold green]")
 
     if "name" in project:
-        console.print(f"Name : {project['name']}")
+        console.print(f"Name        : {project['name']}")
 
     if "type" in project:
-        console.print(f"Type : {project['type'].upper()}")
+        console.print(f"Type        : {project['type'].upper()}")
 
     if "description" in project:
         console.print(f"Description : {project['description']}")
 
-    console.print(f"Path : {project['path']}")
+    console.print(f"Path        : {project['path']}")
+
+
+# ============================================================
+# Description Architecture Preview
+# ============================================================
+
+def display_architecture(architecture):
+    console.print(
+        "\n[bold green]Detected Project Architecture[/bold green]"
+    )
+
+    table = Table(show_header=True, header_style="bold cyan")
+    table.add_column("Component", style="cyan", min_width=20)
+    table.add_column("Detected Configuration")
+
+    table.add_row(
+        "Project Name",
+        str(architecture.get("project_name", "Not identified"))
+    )
+
+    table.add_row(
+        "Domain",
+        str(architecture.get("domain", "Not identified")).upper()
+    )
+
+    table.add_row(
+        "Task",
+        str(architecture.get("task", "Not identified"))
+    )
+
+    table.add_row(
+        "Algorithm Selection",
+        str(architecture.get("algorithm_mode", "Not identified"))
+    )
+
+    algorithms = architecture.get("algorithms", [])
+
+    algorithm_names = [
+        algorithm.get("name", algorithm.get("id", "Unknown"))
+        for algorithm in algorithms
+    ]
+
+    table.add_row(
+        "Algorithms",
+        ", ".join(algorithm_names) if algorithm_names else "None"
+    )
+
+    table.add_row(
+        "Preprocessing",
+        ", ".join(architecture.get("preprocessing", [])) or "None"
+    )
+
+    table.add_row(
+        "Representations",
+        ", ".join(architecture.get("representations", [])) or "None"
+    )
+
+    table.add_row(
+        "Evaluation Metrics",
+        ", ".join(architecture.get("evaluation_metrics", [])) or "None"
+    )
+
+    table.add_row(
+        "Dataset",
+        str(architecture.get("dataset", {}).get("name") or "Not specified")
+    )
+
+    table.add_row(
+        "Interface",
+        str(architecture.get("interface", "none")).upper()
+    )
+
+    console.print(table)
+
+
+# ============================================================
+# Description Analysis
+# ============================================================
+
+def run_description_analysis(project):
+    console.print(
+        "\n[bold cyan]Analyzing Project Description...[/bold cyan]"
+    )
+
+    try:
+        result = analyze_description(project["description"])
+
+    except (FileNotFoundError, ValueError) as error:
+        console.print(f"\n[bold red]Analyzer Error:[/bold red] {error}")
+        return
+
+    except Exception as error:
+        console.print(
+            f"\n[bold red]Unexpected Analysis Error:[/bold red] {error}"
+        )
+        return
+
+    if not result.get("success"):
+        console.print(
+            "\n[bold red]Could not generate a valid architecture.[/bold red]"
+        )
+
+        if result.get("message"):
+            console.print(result["message"])
+
+        for error in result.get("errors", []):
+            console.print(f"[red]- {error}[/red]")
+
+        return
+
+    architecture = result["architecture"]
+
+    display_architecture(architecture)
+
+    validation = architecture.get("validation", {})
+
+    if not validation.get("is_valid", False):
+        console.print(
+            "\n[bold red]Architecture validation failed.[/bold red]"
+        )
+
+        for error in validation.get("errors", []):
+            console.print(f"[red]- {error}[/red]")
+
+        return
+
+    console.print(
+        "\n[bold green]Description analysis completed successfully![/bold green]"
+    )
+
+    console.print(
+        "\n[yellow]Architecture is ready for generator integration.[/yellow]"
+    )
+
+    # The architecture must be adapted to the existing
+    # generator's expected input format before calling
+    # create_project(). We will connect that after verifying
+    # generator.py to avoid breaking Manual Mode.
 
 
 # ============================================================
@@ -245,10 +336,7 @@ def print_summary(project):
 # ============================================================
 
 def main():
-    """Main application loop."""
-
     while True:
-
         display_banner()
 
         generation_mode = select_generation_mode()
@@ -271,21 +359,22 @@ def main():
             continue
 
         # ----------------------------------------------------
-        # Manual Mode
+        # Manual Mode - Existing Pipeline Unchanged
         # ----------------------------------------------------
 
         if generation_mode == "manual":
 
             project = get_project_info()
 
-            if project == "quit":
-                console.print(
-                    "\n[dim]ArchForge closed successfully.[/dim]"
-                )
-                break
+            if isinstance(project, str):
+                if project == "quit":
+                    console.print(
+                        "\n[dim]ArchForge closed successfully.[/dim]"
+                    )
+                    break
 
-            if project in ("home", "back"):
-                continue
+                if project in ("home", "back"):
+                    continue
 
             print_summary(project)
 
@@ -297,40 +386,35 @@ def main():
                 "\n[bold green]Project created successfully![/bold green]"
             )
 
-            input(
-                "\nPress Enter to return to Home..."
-            )
-
+            input("\nPress Enter to return to Home...")
             continue
 
         # ----------------------------------------------------
-        # Description Based Mode
+        # Description-Based Mode
         # ----------------------------------------------------
 
         if generation_mode == "description":
 
             project = get_description_info()
 
-            if project == "quit":
-                console.print(
-                    "\n[dim]ArchForge closed successfully.[/dim]"
-                )
-                break
+            if isinstance(project, str):
+                if project == "quit":
+                    console.print(
+                        "\n[dim]ArchForge closed successfully.[/dim]"
+                    )
+                    break
 
-            if project in ("home", "back"):
-                continue
+                if project in ("home", "back"):
+                    continue
 
-            print_summary(project)
+            print_summary({
+                "description": project["description"],
+                "path": project["path"],
+            })
 
-            console.print(
-                "\n[yellow]Description-based generation "
-                "is currently under development.[/yellow]"
-            )
+            run_description_analysis(project)
 
-            input(
-                "\nPress Enter to return to Home..."
-            )
-
+            input("\nPress Enter to return to Home...")
             continue
 
 
